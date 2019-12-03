@@ -1,3 +1,5 @@
+package io.github.zukkari
+
 import java.io.File
 
 import scopt.OParser
@@ -8,7 +10,7 @@ case class SonarBulkAnalyzerConfig
   out: File = new File(".")
 )
 
-class SonarBulkAnalyzer extends App {
+object SonarBulkAnalyzer extends App {
   val builder = OParser.builder[SonarBulkAnalyzerConfig]
 
   val parser = {
@@ -22,13 +24,13 @@ class SonarBulkAnalyzer extends App {
         .valueName("<dir>")
         .action((x, c) => c.copy(out = x))
         .text("Directory where projects will be cloned to"),
-      opt[File]('r', "repos")
+      opt[File]('r', "repoFile")
         .required()
         .valueName("<file>")
         .action((x, c) => c.copy(repositoryFile = x))
         .text("File where to take repositories to clone from"),
       help("help")
-        .text("Program to analyze projects in SonarQube")
+        .text("Display help"),
     )
   }
 
