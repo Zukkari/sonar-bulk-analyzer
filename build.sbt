@@ -17,9 +17,11 @@ libraryDependencies ++= Seq(
   "org.scala-lang" % "scala-library" % "2.13.0",
   "org.typelevel" %% "cats-core" % "2.0.0",
   "org.typelevel" %% "cats-effect" % "2.0.0",
+  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+  "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
-  "com.typesafe.akka" %% "akka-actor" % "2.6.0",
   "org.scalatest" %% "scalatest" % "3.2.0-M1" % Test,
+  "org.scalatestplus" %% "scalatestplus-mockito" % "1.0.0-M2" % Test,
 )
 
 // Assembly

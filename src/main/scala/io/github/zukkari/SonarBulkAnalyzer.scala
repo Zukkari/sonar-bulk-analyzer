@@ -1,13 +1,14 @@
 package io.github.zukkari
 
 import java.io.File
+import java.nio.file.Files
 
-import akka.actor.{ActorSystem, Props}
-import io.github.zukkari.actors.{GitSourceRouter, RepoFileParser}
+import cats.effect.{ExitCode, IO, IOApp}
+import cats.implicits._
+import com.typesafe.scalalogging.Logger
+import io.github.zukkari.git.GitProjectCloner
 import io.github.zukkari.parser.{FDroidProjectFileParserImpl, ProjectFileParser}
 import scopt.OParser
-
-import scala.concurrent.duration._
 
 case class SonarBulkAnalyzerConfig
 (
@@ -16,10 +17,12 @@ case class SonarBulkAnalyzerConfig
   parser: ProjectFileParser = new FDroidProjectFileParserImpl
 )
 
-object SonarBulkAnalyzer extends App {
-  val builder = OParser.builder[SonarBulkAnalyzerConfig]
+object SonarBulkAnalyzer extends IOApp {
+  private val log = Logger(SonarBulkAnalyzer.getClass)
 
-  val parser = {
+  private val builder = OParser.builder[SonarBulkAnalyzerConfig]
+
+  private val parser = {
     import builder._
 
     OParser.sequence(
@@ -35,12 +38,11 @@ object SonarBulkAnalyzer extends App {
         .valueName("<file>")
         .action((x, c) => c.copy(repositoryFile = x))
         .text("File where to take repositories to clone from"),
-      opt[Unit]('p', "parser")
-        .required()
+      opt[String]('p', "parser")
         .valueName("<parserClass>")
         .action((x, c) => x match {
           case "FDroid" => c.copy(parser = new FDroidProjectFileParserImpl)
-          case _ => ???
+          case _ => c
         })
         .text("Parser to use when parsing repository file"),
       help("help")
@@ -48,20 +50,31 @@ object SonarBulkAnalyzer extends App {
     )
   }
 
-  OParser.parse(parser, args, SonarBulkAnalyzerConfig()) match {
-    case Some(config) => run(config)
-    case _ =>
+  override def run(args: List[String]): IO[ExitCode] = {
+    OParser.parse(parser, args, SonarBulkAnalyzerConfig()) match {
+      case Some(config) => runWith(config)
+      case _ => IO(log.info("Invalid configuration provided")).as(ExitCode.Error)
+    }
   }
 
-  def run(config: SonarBulkAnalyzerConfig): Unit = {
-    val system = ActorSystem("SonarBulkAnalyzerSystem")
+  def runWith(config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
+    val cloner = new GitProjectCloner(config)
 
-    val repoFileParser = system.actorOf(RepoFileParser.props(config.parser), "repoFileParser")
-    system.actorOf(Props[GitSourceRouter], "gitSourceRouter")
+    for {
+      // Load projects
+      projects <- config.parser.parse(config.repositoryFile)
+      // Create directory for projects if missing
+      _ <- mkDir(config)
+      // Clone repositories
+      _ <- cloner.process(projects)
+      _ <- IO(log.info("Analysis finished..."))
+    } yield ExitCode.Success
+  }
 
-    import system.dispatcher
-    system.scheduler.scheduleOnce(500 millis) {
-      repoFileParser ! config.repositoryFile
+  def mkDir(config: SonarBulkAnalyzerConfig): IO[Unit] = {
+    IO(log.info(s"Creating directory for repositories in '${config.out.getAbsolutePath}'")) *>
+    IO {
+      Files.createDirectory(config.out.toPath)
     }
   }
 }
