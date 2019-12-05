@@ -66,7 +66,7 @@ object SonarBulkAnalyzer extends IOApp {
       // Create directory for projects if missing
       _ <- mkDir(config)
       // Clone repositories
-      _ <- cloner.process(projects)
+      _ <- cloner.doClone(projects)
       _ <- IO(log.info("Analysis finished..."))
     } yield ExitCode.Success
   }

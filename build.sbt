@@ -20,6 +20,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
+  "org.eclipse.jgit" % "org.eclipse.jgit" % "5.5.1.201910021850-r",
   "org.scalatest" %% "scalatest" % "3.2.0-M1" % Test,
   "org.scalatestplus" %% "scalatestplus-mockito" % "1.0.0-M2" % Test,
 )
