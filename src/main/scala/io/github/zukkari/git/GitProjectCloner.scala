@@ -26,7 +26,6 @@ class GitProjectCloner(val config: SonarBulkAnalyzerConfig) {
 
   def doClone(projects: List[Project]): IO[List[GitRepository]] = {
     projects.map(p => IO(log.info(s"Cloning project: $p")) *> cloneProject(p))
-      .map(git => git <* IO(log.info(s"Finished cloning project $git")))
       .parSequence
   }
 
@@ -46,6 +45,7 @@ class GitProjectCloner(val config: SonarBulkAnalyzerConfig) {
         .call()
         .getRepository
         .getDirectory
+        .getParentFile
     }
   }
 }

@@ -8,6 +8,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.github.zukkari.git.GitProjectCloner
 import io.github.zukkari.parser.{FDroidProjectFileParserImpl, ProjectFileParser}
+import io.github.zukkari.project.ProjectClassifier
 import scopt.OParser
 
 case class SonarBulkAnalyzerConfig
@@ -59,6 +60,7 @@ object SonarBulkAnalyzer extends IOApp {
 
   def runWith(config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
     val cloner = new GitProjectCloner(config)
+    val classifier = new ProjectClassifier
 
     for {
       // Load projects
@@ -66,7 +68,10 @@ object SonarBulkAnalyzer extends IOApp {
       // Create directory for projects if missing
       _ <- mkDir(config)
       // Clone repositories
-      _ <- cloner.doClone(projects)
+      cloned <- cloner.doClone(projects)
+      // Classify projects
+      _ <- classifier.classify(cloned)
+      // Build the projects
       _ <- IO(log.info("Analysis finished..."))
     } yield ExitCode.Success
   }
