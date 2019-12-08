@@ -1,27 +1,27 @@
 package io.github.zukkari.project
 
-import java.io.File
+import java.util.concurrent.Executors
 
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
+import cats.implicits._
+import com.typesafe.scalalogging.Logger
 
-abstract class ProjectBuilder {
-  def project: File
+import scala.concurrent.ExecutionContext
 
-  def build: IO[Unit]
-}
+class ProjectBuilder {
+  private val log = Logger(this.getClass)
 
-class MavenProjectBuilder(val project: File) extends ProjectBuilder {
-  override def build: IO[Unit] = ???
-}
+  private val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(10))
+  private implicit val contextShift: ContextShift[IO] = IO.contextShift(context)
 
-class GradleProjectBuilder(val project: File) extends ProjectBuilder {
-
-  override def build: IO[Unit] = ???
-
-}
-
-case object NoOp extends ProjectBuilder {
-  override def project: File = ???
-
-  override def build: IO[Unit] = IO.unit
+  def build(projects: List[ProjectBuilderKind]): IO[Unit] = {
+    projects.map {
+      case NoOp => IO.unit
+      case p => p.build
+    }
+      .parSequence
+      .map(projects => IO {
+        log.info(s"Finished building ${projects.size} projects")
+      } *> IO.unit)
+  }
 }

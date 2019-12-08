@@ -10,12 +10,27 @@ import cats.implicits._
 
 import scala.concurrent.ExecutionContext.global
 
-case class Project
+
+trait Project {
+  def name: String
+  def description: String
+  def url: String
+}
+
+case class BaseProject
 (
   name: String,
   description: String,
   url: String
-)
+) extends Project
+
+case object PostCloneProject extends Project {
+  override def name: String = "unknown"
+
+  override def description: String = "unknown"
+
+  override def url: String = "unknown"
+}
 
 trait ProjectFileParser {
   def parse(f: File): IO[List[Project]]
@@ -52,7 +67,7 @@ class FDroidProjectFileParserImpl extends ProjectFileParser {
   def parseProjects(projects: List[String]): IO[List[Project]] = projects.map(mkProject).parSequence
 
   def mkProject(line: String): IO[Project] = line match {
-    case projectRegex(name, desc, url) => IO.pure(Project(name.trim, desc.trim, url.trim))
+    case projectRegex(name, desc, url) => IO.pure(BaseProject(name.trim, desc.trim, url.trim))
     case _ => IO.raiseError(new ParseException(s"Failed to parse line '$line' into a project"))
   }
 }

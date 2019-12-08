@@ -28,16 +28,16 @@ class ProjectClassifier {
   private val log = Logger(this.getClass)
   private implicit val contextShift: ContextShift[IO] = IO.contextShift(global)
 
-  def classify(repos: List[GitRepository]): IO[List[ProjectBuilder]] = repos.map(classify).parSequence
+  def classify(repos: List[GitRepository]): IO[List[ProjectBuilderKind]] = repos.map(classify).parSequence
 
-  def classify(repo: GitRepository): IO[ProjectBuilder] = {
+  def classify(repo: GitRepository): IO[ProjectBuilderKind] = {
     classifyProject(repo.dir).flatMap {
       case GradleProject(f) =>
         IO(log.info(s"Project '$repo' classified as Gradle project")) *>
-        IO.pure(new GradleProjectBuilder(f))
+        IO.pure(new GradleProjectBuilderKind(f))
       case MavenProject(f) =>
         IO(log.info(s"Project '$repo' classified as Maven project")) *>
-        IO.pure(new MavenProjectBuilder(f))
+        IO.pure(new MavenProjectBuilderKind(f))
       case _ => IO(log.error(s"Project '$repo' does not use proper build system so we cannot analyze it")) *> IO.pure(NoOp)
     }
   }
@@ -64,7 +64,7 @@ class ProjectClassifier {
 
   def fileFilter: FileFilter = f => f.isDirectory || maven(f) || gradle(f)
 
-  def gradle: File => Boolean = _.getName.contains("gradle")
+  def gradle: File => Boolean = _.getName == "gradlew"
 
   def maven: File => Boolean = _.getName == "pom.xml"
 

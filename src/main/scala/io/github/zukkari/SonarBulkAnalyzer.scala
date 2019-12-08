@@ -6,16 +6,17 @@ import java.nio.file.Files
 import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
-import io.github.zukkari.git.GitProjectCloner
-import io.github.zukkari.parser.{FDroidProjectFileParserImpl, ProjectFileParser}
-import io.github.zukkari.project.ProjectClassifier
+import io.github.zukkari.git.{GitProjectCloner, GitRepository}
+import io.github.zukkari.parser.{FDroidProjectFileParserImpl, PostCloneProject, ProjectFileParser}
+import io.github.zukkari.project.{ProjectBuilder, ProjectClassifier}
 import scopt.OParser
 
 case class SonarBulkAnalyzerConfig
 (
   repositoryFile: File = new File("."),
   out: File = new File("."),
-  parser: ProjectFileParser = new FDroidProjectFileParserImpl
+  parser: ProjectFileParser = new FDroidProjectFileParserImpl,
+  command: String = ""
 )
 
 object SonarBulkAnalyzer extends IOApp {
@@ -46,6 +47,9 @@ object SonarBulkAnalyzer extends IOApp {
           case _ => c
         })
         .text("Parser to use when parsing repository file"),
+      cmd("build")
+        .action((_, c) => c.copy(command = "build"))
+        .text("Build the projects in provided directory"),
       help("help")
         .text("Display help"),
     )
@@ -53,7 +57,11 @@ object SonarBulkAnalyzer extends IOApp {
 
   override def run(args: List[String]): IO[ExitCode] = {
     OParser.parse(parser, args, SonarBulkAnalyzerConfig()) match {
-      case Some(config) => runWith(config)
+      case Some(config) =>
+        config.command match {
+          case "build" => runBuild(config)
+          case _ => runWith(config)
+        }
       case _ => IO(log.info("Invalid configuration provided")).as(ExitCode.Error)
     }
   }
@@ -61,6 +69,7 @@ object SonarBulkAnalyzer extends IOApp {
   def runWith(config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
     val cloner = new GitProjectCloner(config)
     val classifier = new ProjectClassifier
+    val builder = new ProjectBuilder
 
     for {
       // Load projects
@@ -70,17 +79,38 @@ object SonarBulkAnalyzer extends IOApp {
       // Clone repositories
       cloned <- cloner.doClone(projects)
       // Classify projects
-      _ <- classifier.classify(cloned)
+      classified <- classifier.classify(cloned)
       // Build the projects
+      _ <- builder.build(classified)
       _ <- IO(log.info("Analysis finished..."))
+    } yield ExitCode.Success
+  }
+
+  def runBuild(config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
+    val classifier = new ProjectClassifier
+    val builder = new ProjectBuilder
+
+    val repositories = IO {
+      config.out.listFiles((f, _) => f.isDirectory)
+        .toList
+        .map(dir => GitRepository(PostCloneProject, dir))
+    }
+
+    for {
+      repos <- repositories
+      classified <- classifier.classify(repos)
+      _ <- builder.build(classified)
+      _ <- IO {
+        log.info("Finished building projects")
+      }
     } yield ExitCode.Success
   }
 
   def mkDir(config: SonarBulkAnalyzerConfig): IO[Unit] = {
     IO(log.info(s"Creating directory for repositories in '${config.out.getAbsolutePath}'")) *>
-    IO {
-      Files.createDirectory(config.out.toPath)
-    }
+      IO {
+        Files.createDirectory(config.out.toPath)
+      }
   }
 }
 
