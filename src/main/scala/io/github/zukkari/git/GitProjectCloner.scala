@@ -15,11 +15,12 @@ import scala.concurrent.ExecutionContext.global
 
 case class GitRepository
 (
+  id: String,
   project: Project,
   dir: File
 )
 
-class GitProjectCloner(val config: SonarBulkAnalyzerConfig) {
+class GitProjectCloner(implicit val config: SonarBulkAnalyzerConfig) {
   private implicit val contextShift: ContextShift[IO] = IO.contextShift(global)
 
   private val log = Logger(this.getClass)
@@ -34,7 +35,7 @@ class GitProjectCloner(val config: SonarBulkAnalyzerConfig) {
       id <- IO(UUID.randomUUID().toString)
       dir <- IO(config.out.toPath.resolve(id))
       clonedDir <- cloneRepo(project, dir)
-    } yield GitRepository(project, clonedDir)
+    } yield GitRepository(id, project, clonedDir)
   }
 
   def cloneRepo(p: Project, path: Path): IO[File] = {

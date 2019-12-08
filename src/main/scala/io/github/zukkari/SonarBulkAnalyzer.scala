@@ -2,6 +2,7 @@ package io.github.zukkari
 
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.{ExecutorService, Executors}
 
 import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits._
@@ -11,10 +12,13 @@ import io.github.zukkari.parser.{FDroidProjectFileParserImpl, PostCloneProject, 
 import io.github.zukkari.project.{ProjectBuilder, ProjectClassifier}
 import scopt.OParser
 
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+
 case class SonarBulkAnalyzerConfig
 (
   repositoryFile: File = new File("."),
   out: File = new File("."),
+  error: File = new File("."),
   parser: ProjectFileParser = new FDroidProjectFileParserImpl,
   command: String = ""
 )
@@ -47,6 +51,11 @@ object SonarBulkAnalyzer extends IOApp {
           case _ => c
         })
         .text("Parser to use when parsing repository file"),
+      opt[File]('e', "error")
+        .required()
+        .valueName("<dir>")
+        .action((x, c) => c.copy(error = x))
+        .text("Directory to store errors and output from build proccess"),
       cmd("build")
         .action((_, c) => c.copy(command = "build"))
         .text("Build the projects in provided directory"),
@@ -66,10 +75,9 @@ object SonarBulkAnalyzer extends IOApp {
     }
   }
 
-  def runWith(config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
-    val cloner = new GitProjectCloner(config)
-    val classifier = new ProjectClassifier
-    val builder = new ProjectBuilder
+  def runWith(implicit config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
+    val cloner = new GitProjectCloner
+    val (classifier: ProjectClassifier, executor: ExecutorService, builder: ProjectBuilder) = dependencies
 
     for {
       // Load projects
@@ -83,17 +91,17 @@ object SonarBulkAnalyzer extends IOApp {
       // Build the projects
       _ <- builder.build(classified)
       _ <- IO(log.info("Analysis finished..."))
+      _ <- IO(executor.shutdown()) *> IO(log.info("Shut down executor service"))
     } yield ExitCode.Success
   }
 
-  def runBuild(config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
-    val classifier = new ProjectClassifier
-    val builder = new ProjectBuilder
+  def runBuild(implicit config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
+    val (classifier: ProjectClassifier, executor: ExecutorService, builder: ProjectBuilder) = dependencies
 
     val repositories = IO {
       config.out.listFiles((f, _) => f.isDirectory)
         .toList
-        .map(dir => GitRepository(PostCloneProject, dir))
+        .map(dir => GitRepository(dir.getName, PostCloneProject, dir))
     }
 
     for {
@@ -103,13 +111,29 @@ object SonarBulkAnalyzer extends IOApp {
       _ <- IO {
         log.info("Finished building projects")
       }
+      _ <- IO(executor.shutdown()) *> IO(log.info("Shut down executor service"))
     } yield ExitCode.Success
+  }
+
+  private def dependencies(implicit config: SonarBulkAnalyzerConfig) = {
+    val classifier = new ProjectClassifier
+
+    val executor: ExecutorService = Executors.newFixedThreadPool(10)
+    implicit val context: ExecutionContextExecutor = ExecutionContext.fromExecutor(executor)
+    val builder = new ProjectBuilder
+    (classifier, executor, builder)
   }
 
   def mkDir(config: SonarBulkAnalyzerConfig): IO[Unit] = {
     IO(log.info(s"Creating directory for repositories in '${config.out.getAbsolutePath}'")) *>
       IO {
         Files.createDirectory(config.out.toPath)
+      } *>
+      IO {
+        Files.createDirectory(config.error.toPath)
+      } *>
+      IO {
+        log.info(s"Created error directory at => '${config.error.toPath}'")
       }
   }
 }

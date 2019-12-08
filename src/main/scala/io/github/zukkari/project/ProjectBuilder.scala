@@ -1,27 +1,35 @@
 package io.github.zukkari.project
 
-import java.util.concurrent.Executors
+import java.io.File
+import java.nio.file.Files
 
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
+import io.github.zukkari.SonarBulkAnalyzerConfig
 
 import scala.concurrent.ExecutionContext
 
-class ProjectBuilder {
+class ProjectBuilder(implicit val config: SonarBulkAnalyzerConfig, executionContext: ExecutionContext) {
   private val log = Logger(this.getClass)
 
-  private val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(10))
-  private implicit val contextShift: ContextShift[IO] = IO.contextShift(context)
+  private implicit val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
 
   def build(projects: List[ProjectBuilderKind]): IO[Unit] = {
     projects.map {
       case NoOp => IO.unit
-      case p => p.build
+      case p => p.build(mkOutFile(p))
     }
       .parSequence
       .map(projects => IO {
         log.info(s"Finished building ${projects.size} projects")
-      } *> IO.unit)
+      })
+  }
+
+  def mkOutFile(p: ProjectBuilderKind): IO[File] = {
+    IO {
+      val path = config.error.toPath.resolve(p.id)
+      Files.createFile(path).toFile
+    }
   }
 }

@@ -34,10 +34,10 @@ class ProjectClassifier {
     classifyProject(repo.dir).flatMap {
       case GradleProject(f) =>
         IO(log.info(s"Project '$repo' classified as Gradle project")) *>
-        IO.pure(new GradleProjectBuilderKind(f))
+        IO.pure(new GradleProjectBuilderKind(repo.id, f))
       case MavenProject(f) =>
         IO(log.info(s"Project '$repo' classified as Maven project")) *>
-        IO.pure(new MavenProjectBuilderKind(f))
+        IO.pure(new MavenProjectBuilderKind(repo.id, f))
       case _ => IO(log.error(s"Project '$repo' does not use proper build system so we cannot analyze it")) *> IO.pure(NoOp)
     }
   }
