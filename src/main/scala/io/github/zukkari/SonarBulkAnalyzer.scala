@@ -8,6 +8,7 @@ import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.github.zukkari.git.{GitProjectCloner, GitRepository}
+import io.github.zukkari.gradle.GradleBuildFileEnhancer
 import io.github.zukkari.parser.{FDroidProjectFileParserImpl, PostCloneProject, ProjectFileParser}
 import io.github.zukkari.project.{ProjectBuilder, ProjectClassifier}
 import scopt.OParser
@@ -20,6 +21,7 @@ case class SonarBulkAnalyzerConfig
   out: File = new File("."),
   error: File = new File("."),
   parser: ProjectFileParser = new FDroidProjectFileParserImpl,
+  sonarPluginVersion: String = "2.8",
   command: String = ""
 )
 
@@ -56,6 +58,10 @@ object SonarBulkAnalyzer extends IOApp {
         .valueName("<dir>")
         .action((x, c) => c.copy(error = x))
         .text("Directory to store errors and output from build proccess"),
+      opt[String]('s', "sonar-version")
+        .valueName("<version>")
+        .action((x, c) => c.copy(sonarPluginVersion = x))
+        .text("SonarQube plugin version to add to Gradle files"),
       cmd("build")
         .action((_, c) => c.copy(command = "build"))
         .text("Build the projects in provided directory"),
@@ -77,7 +83,7 @@ object SonarBulkAnalyzer extends IOApp {
 
   def runWith(implicit config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
     val cloner = new GitProjectCloner
-    val (classifier: ProjectClassifier, executor: ExecutorService, builder: ProjectBuilder) = dependencies
+    val (classifier, executor, builder) = dependencies
 
     for {
       // Load projects
@@ -96,7 +102,7 @@ object SonarBulkAnalyzer extends IOApp {
   }
 
   def runBuild(implicit config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
-    val (classifier: ProjectClassifier, executor: ExecutorService, builder: ProjectBuilder) = dependencies
+    val (classifier, executor, builder) = dependencies
 
     val repositories = IO {
       config.out.listFiles((f, _) => f.isDirectory)
@@ -120,6 +126,7 @@ object SonarBulkAnalyzer extends IOApp {
 
     val executor: ExecutorService = Executors.newFixedThreadPool(10)
     implicit val context: ExecutionContextExecutor = ExecutionContext.fromExecutor(executor)
+    implicit val enhancer: GradleBuildFileEnhancer = new GradleBuildFileEnhancer
     val builder = new ProjectBuilder
     (classifier, executor, builder)
   }

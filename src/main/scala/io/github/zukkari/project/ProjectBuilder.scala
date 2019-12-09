@@ -7,10 +7,13 @@ import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.github.zukkari.SonarBulkAnalyzerConfig
+import io.github.zukkari.gradle.GradleBuildFileEnhancer
 
 import scala.concurrent.ExecutionContext
 
-class ProjectBuilder(implicit val config: SonarBulkAnalyzerConfig, executionContext: ExecutionContext) {
+class ProjectBuilder(implicit val config: SonarBulkAnalyzerConfig,
+                     executionContext: ExecutionContext,
+                     implicit val enhancer: GradleBuildFileEnhancer) {
   private val log = Logger(this.getClass)
 
   private implicit val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
@@ -18,7 +21,8 @@ class ProjectBuilder(implicit val config: SonarBulkAnalyzerConfig, executionCont
   def build(projects: List[ProjectBuilderKind]): IO[Unit] = {
     projects.map {
       case NoOp => IO.unit
-      case p => p.build(mkOutFile(p))
+      case m: MavenProjectBuilderKind => m.build(mkOutFile(m))
+      case g: GradleProjectBuilderKind => enhancer.enhance(g.project) *> g.build(mkOutFile(g))
     }
       .parSequence
       .map(projects => IO {
