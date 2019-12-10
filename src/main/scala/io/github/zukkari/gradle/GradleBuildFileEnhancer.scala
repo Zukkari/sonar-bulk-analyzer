@@ -1,9 +1,11 @@
 package io.github.zukkari.gradle
 
-import java.io.File
+import java.io.{File, FileOutputStream}
+import java.nio.charset.StandardCharsets
 
 import cats.effect.{IO, Resource}
 import cats.implicits._
+import com.typesafe.scalalogging.Logger
 import io.github.zukkari.SonarBulkAnalyzerConfig
 
 import scala.annotation.tailrec
@@ -11,6 +13,7 @@ import scala.io.{BufferedSource, Source}
 
 
 class GradleBuildFileEnhancer(implicit val config: SonarBulkAnalyzerConfig) {
+  private val log = Logger(this.getClass)
 
   private val linesToInsert = List(
     "plugins {",
@@ -27,15 +30,23 @@ class GradleBuildFileEnhancer(implicit val config: SonarBulkAnalyzerConfig) {
    * @param f to add plugin node to
    * @return action that will enhance the build file
    */
-  def enhance(f: File): IO[Unit] = {
+  def enhance(id: String, f: File): IO[Unit] = {
     gradleBuildFile(f)
       .use { lines =>
         IO(lines.getLines().toList)
       }
-      .map(scriptWithPluginNode)
+      .flatMap(lines => IO.pure(scriptWithPluginNode(lines)))
+      .flatMap { script =>
+        gradleBuildFileOut(f)
+          .use {
+            stream =>
+              IO(stream.write(script.mkString("\n").getBytes(StandardCharsets.UTF_8)))
+          }
+      } *>
+    IO(log.info(s"Finished adding plugin information to build script of $id"))
   }
 
-  def gradleBuildFile(f: File): Resource[IO, BufferedSource] = {
+  private def gradleBuildFile(f: File): Resource[IO, BufferedSource] = {
     val path = f.toPath.resolve("build.gradle")
     val input = IO {
       Source.fromFile(path.toFile)
@@ -44,20 +55,29 @@ class GradleBuildFileEnhancer(implicit val config: SonarBulkAnalyzerConfig) {
     Resource.fromAutoCloseable(input)
   }
 
-  def indexOfClosingParen(remainder: List[String], start: Int): Int = {
+  private def gradleBuildFileOut(f: File): Resource[IO, FileOutputStream] = {
+    val path = f.toPath.resolve("build.gradle")
+    val input = IO {
+      new FileOutputStream(path.toFile, false)
+    }
+
+    Resource.fromAutoCloseable(input)
+  }
+
+  private def indexOfClosingParen(remainder: List[String], start: Int): Int = {
     @tailrec
-    def processLine(line: List[Char], parens: Int): (Int, Option[Int]) = {
+    def processLine(line: List[Char], parens: Int, currLine: Int): (Int, Option[Int]) = {
       line match {
         case x :: xs =>
           x match {
-            case '{' => processLine(xs, parens + 1)
+            case '{' => processLine(xs, parens + 1, currLine)
             case '}' =>
-              if (parens == 0) {
-                (parens, start.some)
+              if (parens == 1) {
+                (parens, currLine.some)
               } else {
-                processLine(xs, parens - 1)
+                processLine(xs, parens - 1, currLine)
               }
-            case _ => processLine(xs, parens)
+            case _ => processLine(xs, parens, currLine)
           }
         case Nil => (parens, none)
       }
@@ -67,7 +87,7 @@ class GradleBuildFileEnhancer(implicit val config: SonarBulkAnalyzerConfig) {
     def _indexOfClosingParen(lines: List[String], start: Int, parens: Int): Int = {
       lines match {
         case x :: xs =>
-          processLine(x.toList, parens) match {
+          processLine(x.toList, parens, start) match {
             case (_, Some(v)) => v
             case (p, _) => _indexOfClosingParen(xs, start + 1, p)
           }
@@ -78,7 +98,7 @@ class GradleBuildFileEnhancer(implicit val config: SonarBulkAnalyzerConfig) {
     _indexOfClosingParen(remainder, start, 1)
   }
 
-  def scriptWithPluginNode(lines: List[String]): List[String] = {
+  private def scriptWithPluginNode(lines: List[String]): List[String] = {
     val hasBuildScript = lines.find(l => l.contains("buildscript {") || l.contains("buildscript{"))
     hasBuildScript match {
       case None => linesToInsert ++ lines
@@ -87,7 +107,7 @@ class GradleBuildFileEnhancer(implicit val config: SonarBulkAnalyzerConfig) {
         val remainder = lines.drop(idx + 1)
         val closing = indexOfClosingParen(remainder, idx)
 
-        lines.slice(0, closing) ++ linesToInsert ++ lines.slice(closing, lines.size)
+        lines.slice(0, closing + 2) ++ linesToInsert ++ lines.slice(closing + 2, lines.size)
     }
   }
 }

@@ -22,7 +22,7 @@ class ProjectBuilder(implicit val config: SonarBulkAnalyzerConfig,
     projects.map {
       case NoOp => IO.unit
       case m: MavenProjectBuilderKind => m.build(mkOutFile(m))
-      case g: GradleProjectBuilderKind => enhancer.enhance(g.project) *> g.build(mkOutFile(g))
+      case g: GradleProjectBuilderKind => enhancer.enhance(g.id, g.project) *> g.build(mkOutFile(g))
     }
       .parSequence
       .map(projects => IO {
