@@ -22,7 +22,9 @@ case class SonarBulkAnalyzerConfig
   error: File = new File("."),
   parser: ProjectFileParser = new FDroidProjectFileParserImpl,
   sonarPluginVersion: String = "2.8",
-  command: String = ""
+  command: String = "",
+  sonarUrl: String = "",
+  sonarToken: String = ""
 )
 
 object SonarBulkAnalyzer extends IOApp {
@@ -62,6 +64,16 @@ object SonarBulkAnalyzer extends IOApp {
         .valueName("<version>")
         .action((x, c) => c.copy(sonarPluginVersion = x))
         .text("SonarQube plugin version to add to Gradle files"),
+      opt[String]('t', "token")
+        .required()
+        .valueName("<token>")
+        .action((x, c) => c.copy(sonarToken = x))
+        .text("Token to use when authenticating with SonarQube"),
+      opt[String]("sonar-url")
+        .required()
+        .valueName("<url>")
+        .action((x, c) => c.copy(sonarUrl = x))
+        .text("SonarQube location"),
       cmd("build")
         .action((_, c) => c.copy(command = "build"))
         .text("Build the projects in provided directory"),
@@ -96,6 +108,8 @@ object SonarBulkAnalyzer extends IOApp {
       classified <- classifier.classify(cloned)
       // Build the projects
       _ <- builder.build(classified)
+      // Create the projects in SonarQube
+
       _ <- IO(log.info("Analysis finished..."))
       _ <- IO(executor.shutdown()) *> IO(log.info("Shut down executor service"))
     } yield ExitCode.Success

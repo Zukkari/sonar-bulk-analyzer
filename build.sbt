@@ -11,6 +11,8 @@ scalacOptions := Seq(
   "-language:higherKinds",
 )
 
+val http4sVersion = "0.21.0-M6"
+
 // Dependencies
 val sonarVersion = "7.9"
 libraryDependencies ++= Seq(
@@ -21,6 +23,8 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
   "org.eclipse.jgit" % "org.eclipse.jgit" % "5.5.1.201910021850-r",
+  "org.http4s" %% "http4s-dsl" % http4sVersion,
+  "org.http4s" %% "http4s-blaze-client" % http4sVersion,
   "org.scalatest" %% "scalatest" % "3.2.0-M1" % Test,
   "org.scalatestplus" %% "scalatestplus-mockito" % "1.0.0-M2" % Test,
 )
