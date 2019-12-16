@@ -11,8 +11,10 @@ import io.github.zukkari.git.{GitProjectCloner, GitRepository}
 import io.github.zukkari.gradle.GradleBuildFileEnhancer
 import io.github.zukkari.parser.{FDroidProjectFileParserImpl, PostCloneProject, ProjectFileParser}
 import io.github.zukkari.project.{ProjectBuilder, ProjectClassifier}
+import io.github.zukkari.sonar.SonarClientImpl
 import scopt.OParser
 
+import scala.concurrent.ExecutionContext.global
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
 case class SonarBulkAnalyzerConfig
@@ -24,7 +26,8 @@ case class SonarBulkAnalyzerConfig
   sonarPluginVersion: String = "2.8",
   command: String = "",
   sonarUrl: String = "",
-  sonarToken: String = ""
+  sonarToken: String = "",
+  defaultProfile: String = ""
 )
 
 object SonarBulkAnalyzer extends IOApp {
@@ -74,6 +77,11 @@ object SonarBulkAnalyzer extends IOApp {
         .valueName("<url>")
         .action((x, c) => c.copy(sonarUrl = x))
         .text("SonarQube location"),
+      opt[String]("default-profile")
+        .required()
+        .valueName("<profile>")
+        .action((x, c) => c.copy(defaultProfile = x))
+        .text("Default profile to set for Sonar projects"),
       cmd("build")
         .action((_, c) => c.copy(command = "build"))
         .text("Build the projects in provided directory"),
@@ -97,6 +105,8 @@ object SonarBulkAnalyzer extends IOApp {
     val cloner = new GitProjectCloner
     val (classifier, executor, builder) = dependencies
 
+    implicit val context: ExecutionContextExecutor = global
+    val client = new SonarClientImpl()
     for {
       // Load projects
       projects <- config.parser.parse(config.repositoryFile)
@@ -108,8 +118,10 @@ object SonarBulkAnalyzer extends IOApp {
       classified <- classifier.classify(cloned)
       // Build the projects
       _ <- builder.build(classified)
+      //Change the default profile to required profile
+      _ <- client.defaultProfile
       // Create the projects in SonarQube
-
+      _ <- client.createProjects(classified)
       _ <- IO(log.info("Analysis finished..."))
       _ <- IO(executor.shutdown()) *> IO(log.info("Shut down executor service"))
     } yield ExitCode.Success

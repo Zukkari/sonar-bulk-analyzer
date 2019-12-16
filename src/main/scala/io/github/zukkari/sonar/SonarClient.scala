@@ -1,15 +1,16 @@
 package io.github.zukkari.sonar
 
-import cats.effect.{ContextShift, IO, Resource}
+import cats.effect.{ContextShift, ExitCode, IO, IOApp, Resource}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.github.zukkari.SonarBulkAnalyzerConfig
 import io.github.zukkari.project.ProjectBuilderKind
-import org.http4s.Uri
+import org.http4s.{BasicCredentials, Uri}
 import org.http4s.client.Client
 import org.http4s.client.blaze.BlazeClientBuilder
 import org.http4s.client.dsl.Http4sClientDsl
 import org.http4s.dsl.io._
+import org.http4s.headers.Authorization
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.global
@@ -18,6 +19,8 @@ trait SonarClient {
   def createProject(project: ProjectBuilderKind): IO[Unit]
 
   def createProjects(projects: List[ProjectBuilderKind]): IO[Unit]
+
+  def defaultProfile: IO[Unit]
 }
 
 class SonarClientImpl(implicit val config: SonarBulkAnalyzerConfig,
@@ -52,4 +55,20 @@ class SonarClientImpl(implicit val config: SonarBulkAnalyzerConfig,
 
   private def client(): Resource[IO, Client[IO]] = BlazeClientBuilder[IO](global).resource
 
+  override def defaultProfile: IO[Unit] = {
+    val parsed = Uri.fromString(config.sonarUrl)
+    parsed match {
+      case Left(value) => IO.raiseError(value)
+      case Right(uri) =>
+        val extended = (uri / "api" / "qualityprofiles" / "set_default")
+          .withQueryParam("language", "java")
+          .withQueryParam("qualityProfile", config.defaultProfile)
+
+        log.info(s"Setting default profile: $extended")
+        client().use { client =>
+          client.expect[Unit](POST(extended,
+            Authorization(BasicCredentials(config.sonarToken, ""))))
+        }
+    }
+  }
 }
