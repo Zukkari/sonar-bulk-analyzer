@@ -8,3 +8,4 @@ Tool for bulk project analysis in SonarQube
 - External dependencies such as need to add some kind of files before build
 - Android SDK required to build Android projects
 - SDK license manager
+- Some projects are missing build systems, so its not possible to programmatically compile them efficiently
