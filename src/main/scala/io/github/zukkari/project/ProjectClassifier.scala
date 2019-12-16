@@ -5,6 +5,7 @@ import java.io.{File, FileFilter}
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
+import io.github.zukkari.SonarBulkAnalyzerConfig
 import io.github.zukkari.git.GitRepository
 
 import scala.annotation.tailrec
@@ -24,7 +25,7 @@ case object Unknown extends ProjectKind {
 
 case class UnknownProject(msg: String) extends Exception
 
-class ProjectClassifier {
+class ProjectClassifier(val config: SonarBulkAnalyzerConfig) {
   private val log = Logger(this.getClass)
   private implicit val contextShift: ContextShift[IO] = IO.contextShift(global)
 
@@ -34,10 +35,10 @@ class ProjectClassifier {
     classifyProject(repo.dir).flatMap {
       case GradleProject(f) =>
         IO(log.info(s"Project '$repo' classified as Gradle project")) *>
-        IO.pure(new GradleProjectBuilderKind(repo.id, f))
+        IO.pure(new GradleProjectBuilderKind(repo.id, f, config))
       case MavenProject(f) =>
         IO(log.info(s"Project '$repo' classified as Maven project")) *>
-        IO.pure(new MavenProjectBuilderKind(repo.id, f))
+        IO.pure(new MavenProjectBuilderKind(repo.id, f, config))
       case _ => IO(log.error(s"Project '$repo' does not use proper build system so we cannot analyze it")) *> IO.pure(NoOp)
     }
   }

@@ -10,7 +10,7 @@ import com.typesafe.scalalogging.Logger
 import io.github.zukkari.git.{GitProjectCloner, GitRepository}
 import io.github.zukkari.gradle.GradleBuildFileEnhancer
 import io.github.zukkari.parser.{FDroidProjectFileParserImpl, PostCloneProject, ProjectFileParser}
-import io.github.zukkari.project.{ProjectBuilder, ProjectClassifier}
+import io.github.zukkari.project.{ProjectAnalyzer, ProjectBuilder, ProjectClassifier}
 import io.github.zukkari.sonar.SonarClientImpl
 import scopt.OParser
 
@@ -107,6 +107,8 @@ object SonarBulkAnalyzer extends IOApp {
 
     implicit val context: ExecutionContextExecutor = global
     val client = new SonarClientImpl()
+
+    val analyzer = new ProjectAnalyzer
     for {
       // Load projects
       projects <- config.parser.parse(config.repositoryFile)
@@ -122,6 +124,8 @@ object SonarBulkAnalyzer extends IOApp {
       _ <- client.defaultProfile
       // Create the projects in SonarQube
       _ <- client.createProjects(classified)
+      // Run analysis
+      _ <- analyzer.analyze(classified)
       _ <- IO(log.info("Analysis finished..."))
       _ <- IO(executor.shutdown()) *> IO(log.info("Shut down executor service"))
     } yield ExitCode.Success
@@ -148,7 +152,7 @@ object SonarBulkAnalyzer extends IOApp {
   }
 
   private def dependencies(implicit config: SonarBulkAnalyzerConfig) = {
-    val classifier = new ProjectClassifier
+    val classifier = new ProjectClassifier(config)
 
     val executor: ExecutorService = Executors.newFixedThreadPool(10)
     implicit val context: ExecutionContextExecutor = ExecutionContext.fromExecutor(executor)

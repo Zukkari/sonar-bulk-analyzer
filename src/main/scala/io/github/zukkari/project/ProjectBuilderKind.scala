@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets
 import cats.effect.{IO, Resource}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
+import io.github.zukkari.SonarBulkAnalyzerConfig
 
 
 case class BuildFailedException(msg: String) extends Exception
@@ -34,7 +35,7 @@ abstract class ProjectBuilderKind {
       project.list((_, name) => wrapperName contains name).length > 0
     }
 
-  def args: List[String]
+  def buildArgs: List[String]
 
   private def permissionAction: IO[Unit] = IO {
     new ProcessBuilder()
@@ -64,19 +65,12 @@ abstract class ProjectBuilderKind {
     } yield ()
 
     preProcess *>
-    giveExecutePermission *>
+      giveExecutePermission *>
       IO {
         val executable = if (useWrapper) wrapperName else executableName
-        val command = executable :: args
+        val command = executable :: buildArgs
         log.info(s"Building project with command: '$command'")
-
-        new ProcessBuilder()
-          .directory(project)
-          .command(command: _*)
-          .redirectOutput(outputStream)
-          .redirectError(outputStream)
-          .start()
-          .waitFor()
+        processBuilder(outputStream, command)
       }.flatMap {
         case 0 => IO {
           log.info(s"Build for $id finished with SUCCESS")
@@ -110,24 +104,74 @@ abstract class ProjectBuilderKind {
 
     Resource.fromAutoCloseable(stream)
   }
+
+  def analysisArgs: List[String]
+
+  def runAnalysis(logFile: IO[File]): IO[Unit] = {
+    (for {
+      f <- logFile
+      useWrapper <- usesWrapper
+      exitCode <- IO {
+        val executable = if (useWrapper) wrapperName else executableName
+        val command = executable :: analysisArgs
+        log.info(s"Running analysis with command: '$command'")
+
+        processBuilder(f, command)
+      }
+    } yield exitCode)
+      .flatMap {
+        case 0 => IO {
+          log.info(s"Analysis for $id finished with SUCCESS")
+        }
+        case exitCode => IO {
+          log.error(s"Analysis for $id finished with ERROR: $exitCode.")
+        }
+      } *>
+      IO {
+        log.info(s"Analysis finished for project: $id")
+      }
+  }
+
+  private def processBuilder(f: File, command: List[String]) = {
+    new ProcessBuilder()
+      .directory(project)
+      .command(command: _*)
+      .redirectOutput(f)
+      .redirectError(f)
+      .start()
+      .waitFor()
+  }
 }
 
-class MavenProjectBuilderKind(val id: String, val project: File) extends ProjectBuilderKind {
+class MavenProjectBuilderKind(val id: String, val project: File, val config: SonarBulkAnalyzerConfig) extends ProjectBuilderKind {
 
   override def wrapperName: String = "./mvnw"
 
-  override def args: List[String] = List("package", "-DskipTests")
+  override def buildArgs: List[String] = List("package", "-DskipTests")
 
   override def executableName: String = "mvn"
+
+  override def analysisArgs: List[String] = List("sonar:sonar",
+    s"-Dsonar.projectKey=$id",
+    s"-Dsonar.host.url=${config.sonarUrl}",
+    s"-Dsonar.login=${config.sonarToken}"
+  )
 }
 
-class GradleProjectBuilderKind(val id: String, val project: File) extends ProjectBuilderKind {
+class GradleProjectBuilderKind(val id: String, val project: File, val config: SonarBulkAnalyzerConfig) extends ProjectBuilderKind {
 
   override def wrapperName: String = "./gradlew"
 
-  override def args: List[String] = List("build", "-x", "test")
+  override def buildArgs: List[String] = List("build", "-x", "test")
 
   override def executableName: String = "gradle"
+
+  override def analysisArgs: List[String] = List(
+    "sonarqube",
+    s"-Dsonar.projectKey=$id",
+    s"-Dsonar.host.url=${config.sonarUrl}",
+    s"-Dsonar.login=${config.sonarToken}"
+  )
 }
 
 case object NoOp extends ProjectBuilderKind {
@@ -135,9 +179,11 @@ case object NoOp extends ProjectBuilderKind {
 
   override def wrapperName: String = ???
 
-  override def args: List[String] = ???
+  override def buildArgs: List[String] = ???
 
   override def executableName: String = ???
 
   override def id: String = ???
+
+  override def analysisArgs: List[String] = ???
 }
