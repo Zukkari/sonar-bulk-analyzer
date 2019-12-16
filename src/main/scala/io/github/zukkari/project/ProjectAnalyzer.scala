@@ -18,8 +18,9 @@ class ProjectAnalyzer(implicit val executor: Executor, config: SonarBulkAnalyzer
   private implicit val contextShift: ContextShift[IO] = IO.contextShift(context)
 
   def analyze(projects: List[ProjectBuilderKind]): IO[Unit] = {
-    projects.map { project =>
-      project.runAnalysis(mkLogFile(project))
+    projects.map {
+      case NoOp => IO.unit
+      case project => project.runAnalysis(mkLogFile(project))
     }.parSequence *>
       IO {
         log.info(s"Finished analysis for ${projects.size} projects")

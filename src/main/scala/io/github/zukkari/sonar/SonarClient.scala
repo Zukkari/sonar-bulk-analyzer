@@ -4,7 +4,7 @@ import cats.effect.{ContextShift, ExitCode, IO, IOApp, Resource}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.github.zukkari.SonarBulkAnalyzerConfig
-import io.github.zukkari.project.ProjectBuilderKind
+import io.github.zukkari.project.{NoOp, ProjectBuilderKind}
 import org.http4s.{BasicCredentials, Uri}
 import org.http4s.client.Client
 import org.http4s.client.blaze.BlazeClientBuilder
@@ -30,7 +30,10 @@ class SonarClientImpl(implicit val config: SonarBulkAnalyzerConfig,
   private val log = Logger(this.getClass)
 
   override def createProjects(projects: List[ProjectBuilderKind]): IO[Unit] = {
-    projects.map(createProject)
+    projects.map {
+      case NoOp => IO.unit
+      case project => createProject(project)
+    }
       .parSequence *>
       IO {
         log.info("Finished project creation via API")
