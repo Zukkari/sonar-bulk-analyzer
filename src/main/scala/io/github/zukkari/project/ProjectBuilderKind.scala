@@ -18,12 +18,12 @@ abstract class ProjectBuilderKind {
 
   def project: File
 
-  def build(outFile: IO[File]): IO[Unit] = {
+  def build(outFile: IO[File]): IO[ProjectBuilderKind] = {
     for {
       out <- outFile
       wrapper <- usesWrapper
-      _ <- run(wrapper, out)
-    } yield ()
+      project <- run(wrapper, out)
+    } yield project
   }
 
   def wrapperName: String
@@ -49,7 +49,7 @@ abstract class ProjectBuilderKind {
     case errCode => IO.raiseError(BuildFailedException(s"Failed to give permission to the project: '$project' due to exit code: '$errCode'"))
   }
 
-  def run(useWrapper: Boolean, outputStream: File): IO[Unit] = {
+  def run(useWrapper: Boolean, outputStream: File): IO[ProjectBuilderKind] = {
     val giveExecutePermission = if (useWrapper) {
       // If we use wrapper we have to give execute permission
       // its always a good idea to run random executables from the internet
@@ -74,9 +74,11 @@ abstract class ProjectBuilderKind {
       }.flatMap {
         case 0 => IO {
           log.info(s"Build for $id finished with SUCCESS")
+          this
         }
         case exitCode => IO {
           log.error(s"Build for $id finished with ERROR: $exitCode. Details: ${outputStream.getAbsolutePath}")
+          NoOp
         }
       }
   }

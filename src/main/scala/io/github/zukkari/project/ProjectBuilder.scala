@@ -18,15 +18,16 @@ class ProjectBuilder(implicit val config: SonarBulkAnalyzerConfig,
 
   private implicit val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
 
-  def build(projects: List[ProjectBuilderKind]): IO[Unit] = {
+  def build(projects: List[ProjectBuilderKind]): IO[List[ProjectBuilderKind]] = {
     projects.map {
-      case NoOp => IO.unit
+      case NoOp => IO { NoOp }
       case m: MavenProjectBuilderKind => m.build(mkOutFile(m))
       case g: GradleProjectBuilderKind => enhancer.enhance(g.id, g.project) *> g.build(mkOutFile(g))
     }
       .parSequence
-      .map(projects => IO {
+      .flatMap(projects => IO {
         log.info(s"Finished building ${projects.size} projects")
+        projects
       })
   }
 

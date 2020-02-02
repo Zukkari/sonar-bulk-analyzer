@@ -10,7 +10,7 @@ import com.typesafe.scalalogging.Logger
 import io.github.zukkari.git.{GitProjectCloner, GitRepository}
 import io.github.zukkari.gradle.GradleBuildFileEnhancer
 import io.github.zukkari.parser.{FDroidProjectFileParserImpl, PostCloneProject, ProjectFileParser}
-import io.github.zukkari.project.{ProjectAnalyzer, ProjectBuilder, ProjectClassifier}
+import io.github.zukkari.project.{NoOp, ProjectAnalyzer, ProjectBuilder, ProjectClassifier}
 import io.github.zukkari.sonar.SonarClientImpl
 import scopt.OParser
 
@@ -119,13 +119,14 @@ object SonarBulkAnalyzer extends IOApp {
       // Classify projects
       classified <- classifier.classify(cloned)
       // Build the projects
-      _ <- builder.build(classified)
+      builtProjects <- builder.build(classified)
+      onlySuccess = builtProjects.filter( _ != NoOp )
       //Change the default profile to required profile
       _ <- client.defaultProfile
       // Create the projects in SonarQube
-      _ <- client.createProjects(classified)
+      _ <- client.createProjects(onlySuccess)
       // Run analysis
-      _ <- analyzer.analyze(classified)
+      _ <- analyzer.analyze(onlySuccess)
       _ <- IO(log.info("Analysis finished..."))
       _ <- IO(executor.shutdown()) *> IO(log.info("Shut down executor service"))
     } yield ExitCode.Success
@@ -154,7 +155,7 @@ object SonarBulkAnalyzer extends IOApp {
   private def dependencies(implicit config: SonarBulkAnalyzerConfig) = {
     val classifier = new ProjectClassifier(config)
 
-    val executor: ExecutorService = Executors.newFixedThreadPool(10)
+    val executor: ExecutorService = Executors.newFixedThreadPool(2)
     implicit val context: ExecutionContextExecutor = ExecutionContext.fromExecutor(executor)
     implicit val enhancer: GradleBuildFileEnhancer = new GradleBuildFileEnhancer
     val builder = new ProjectBuilder
