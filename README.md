@@ -34,6 +34,9 @@ Build the projects in provided directory
   --help                   Display help
 ```
 
+# Corpus format
+
+Currently only single parser is implemented for the following [corpus file](https://raw.githubusercontent.com/UPHF/kotlinandroid/master/docs/fdroid_all.md) 
 
 # Issues
 
