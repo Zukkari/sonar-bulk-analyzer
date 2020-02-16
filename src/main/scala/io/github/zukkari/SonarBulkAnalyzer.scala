@@ -7,7 +7,7 @@ import java.util.concurrent.{ExecutorService, Executors}
 import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
-import io.github.zukkari.git.{GitProjectCloner, GitRepository}
+import io.github.zukkari.git.{GitProjectCloner, GitRepositoryImpl}
 import io.github.zukkari.gradle.GradleBuildFileEnhancer
 import io.github.zukkari.parser.{FDroidProjectFileParserImpl, PostCloneProject, ProjectFileParser}
 import io.github.zukkari.project.{NoOp, ProjectAnalyzer, ProjectBuilder, ProjectClassifier}
@@ -115,7 +115,11 @@ object SonarBulkAnalyzer extends IOApp {
       // Create directory for projects if missing
       _ <- mkDir(config)
       // Clone repositories
-      cloned <- cloner.doClone(projects)
+      allProjects <- cloner.doClone(projects)
+      cloned = allProjects.filter {
+        case _: GitRepositoryImpl => true
+        case _ => false
+      }
       // Classify projects
       classified <- classifier.classify(cloned)
       // Build the projects
@@ -138,7 +142,7 @@ object SonarBulkAnalyzer extends IOApp {
     val repositories = IO {
       config.out.listFiles((f, _) => f.isDirectory)
         .toList
-        .map(dir => GitRepository(dir.getName, PostCloneProject, dir))
+        .map(dir => GitRepositoryImpl(dir.getName, PostCloneProject, dir))
     }
 
     for {

@@ -12,13 +12,30 @@ import io.github.zukkari.parser.Project
 import org.eclipse.jgit.api.Git
 
 import scala.concurrent.ExecutionContext.global
+import scala.util.Try
 
-case class GitRepository
+trait GitRepository {
+  def id: String
+
+  def project: Project
+
+  def dir: File
+}
+
+case class GitRepositoryImpl
 (
   id: String,
   project: Project,
   dir: File
-)
+) extends GitRepository
+
+case object NoRepository extends GitRepository {
+  override def id: String = ???
+
+  override def project: Project = ???
+
+  override def dir: File = ???
+}
 
 class GitProjectCloner(implicit val config: SonarBulkAnalyzerConfig) {
   private implicit val contextShift: ContextShift[IO] = IO.contextShift(global)
@@ -31,11 +48,18 @@ class GitProjectCloner(implicit val config: SonarBulkAnalyzerConfig) {
   }
 
   def cloneProject(project: Project): IO[GitRepository] = {
-    for {
-      id <- IO(UUID.randomUUID().toString)
-      dir <- IO(config.out.toPath.resolve(id))
-      clonedDir <- cloneRepo(project, dir)
-    } yield GitRepository(id, project, clonedDir)
+    Try(
+      for {
+        id <- IO(UUID.randomUUID().toString)
+        dir <- IO(config.out.toPath.resolve(id))
+        clonedDir <- cloneRepo(project, dir)
+      } yield GitRepositoryImpl(id, project, clonedDir)
+    ).fold(err =>
+      IO {
+        log.error(s"ERROR when cloning git repository for project: $project", err)
+      } *> IO.pure(NoRepository),
+      repo => repo
+    )
   }
 
   def cloneRepo(p: Project, path: Path): IO[File] = {
@@ -49,4 +73,5 @@ class GitProjectCloner(implicit val config: SonarBulkAnalyzerConfig) {
         .getParentFile
     }
   }
+
 }
