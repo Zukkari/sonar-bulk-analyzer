@@ -1,9 +1,10 @@
 package io.github.zukkari.parser
 
 import java.io.File
+import io.github.zukkari.execution._
 
 class FDroidProjectFileParserImplTest extends TestSpec {
-  val parser = new FDroidProjectFileParserImpl
+  val parser = new FDroidProjectFileParserImpl(context)
 
   it should "create a resource from file" in {
     val f = mock[File]

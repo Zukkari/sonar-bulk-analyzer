@@ -156,7 +156,7 @@ object SonarBulkAnalyzer extends IOApp {
     val classifier = new ProjectClassifier(config)
 
     val enhancer: GradleBuildFileEnhancer = new GradleBuildFileEnhancer
-    (classifier, new ProjectBuilder(config, context, enhancer))
+    (classifier, new ProjectBuilder(config, enhancer))
   }
 
   def mkDir(config: SonarBulkAnalyzerConfig): IO[Unit] = {
