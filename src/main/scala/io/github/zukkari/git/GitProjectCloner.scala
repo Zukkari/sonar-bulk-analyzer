@@ -43,23 +43,18 @@ class GitProjectCloner(implicit val config: SonarBulkAnalyzerConfig) {
   private val log = Logger(this.getClass)
 
   def doClone(projects: List[Project]): IO[List[GitRepository]] = {
-    projects.map(p => IO(log.info(s"Cloning project: $p")) *> cloneProject(p))
+    projects.map(p => IO(log.info(s"Cloning project: $p")) *> cloneProject(p).handleErrorWith(err => IO {
+      log.error(s"ERROR when cloning git repository for project: $p", err)
+    } *> IO.pure(NoRepository)))
       .parSequence
   }
 
   def cloneProject(project: Project): IO[GitRepository] = {
-    Try(
-      for {
-        id <- IO(UUID.randomUUID().toString)
-        dir <- IO(config.out.toPath.resolve(id))
-        clonedDir <- cloneRepo(project, dir)
-      } yield GitRepositoryImpl(id, project, clonedDir)
-    ).fold(err =>
-      IO {
-        log.error(s"ERROR when cloning git repository for project: $project", err)
-      } *> IO.pure(NoRepository),
-      repo => repo
-    )
+    for {
+      id <- IO(UUID.randomUUID().toString)
+      dir <- IO(config.out.toPath.resolve(id))
+      clonedDir <- cloneRepo(project, dir)
+    } yield GitRepositoryImpl(id, project, clonedDir)
   }
 
   def cloneRepo(p: Project, path: Path): IO[File] = {
