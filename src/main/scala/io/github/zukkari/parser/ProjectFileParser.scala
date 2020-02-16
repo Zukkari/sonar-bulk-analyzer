@@ -8,7 +8,7 @@ import com.typesafe.scalalogging.Logger
 import scala.io.{BufferedSource, Source}
 import cats.implicits._
 
-import scala.concurrent.ExecutionContext.global
+import scala.concurrent.ExecutionContext
 
 
 trait Project {
@@ -38,8 +38,8 @@ trait ProjectFileParser {
 
 sealed class ParseException(reason: String) extends Exception
 
-class FDroidProjectFileParserImpl extends ProjectFileParser {
-  private implicit val contextShift: ContextShift[IO] = IO.contextShift(global)
+class FDroidProjectFileParserImpl(val context: ExecutionContext) extends ProjectFileParser {
+  private implicit val contextShift: ContextShift[IO] = IO.contextShift(context)
 
   private val log = Logger(this.getClass)
 

@@ -8,11 +8,9 @@ import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.github.zukkari.SonarBulkAnalyzerConfig
+import io.github.zukkari.execution._
 import io.github.zukkari.parser.Project
 import org.eclipse.jgit.api.Git
-
-import scala.concurrent.ExecutionContext.global
-import scala.util.Try
 
 trait GitRepository {
   def id: String
@@ -37,8 +35,8 @@ case object NoRepository extends GitRepository {
   override def dir: File = ???
 }
 
-class GitProjectCloner(implicit val config: SonarBulkAnalyzerConfig) {
-  private implicit val contextShift: ContextShift[IO] = IO.contextShift(global)
+class GitProjectCloner(val config: SonarBulkAnalyzerConfig) {
+  private implicit val contextShift: ContextShift[IO] = IO.contextShift(context)
 
   private val log = Logger(this.getClass)
 

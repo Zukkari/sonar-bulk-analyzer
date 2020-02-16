@@ -1,19 +1,17 @@
 package io.github.zukkari.sonar
 
-import cats.effect.{ContextShift, ExitCode, IO, IOApp, Resource}
+import cats.effect.{ContextShift, IO, Resource}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.github.zukkari.SonarBulkAnalyzerConfig
+import io.github.zukkari.execution._
 import io.github.zukkari.project.{NoOp, ProjectBuilderKind}
-import org.http4s.{BasicCredentials, Uri}
 import org.http4s.client.Client
 import org.http4s.client.blaze.BlazeClientBuilder
 import org.http4s.client.dsl.Http4sClientDsl
 import org.http4s.dsl.io._
 import org.http4s.headers.Authorization
-
-import scala.concurrent.ExecutionContext
-import scala.concurrent.ExecutionContext.global
+import org.http4s.{BasicCredentials, Uri}
 
 trait SonarClient {
   def createProject(project: ProjectBuilderKind): IO[Unit]
@@ -23,8 +21,7 @@ trait SonarClient {
   def defaultProfile: IO[Unit]
 }
 
-class SonarClientImpl(implicit val config: SonarBulkAnalyzerConfig,
-                      val context: ExecutionContext) extends SonarClient with Http4sClientDsl[IO] {
+class SonarClientImpl(val config: SonarBulkAnalyzerConfig) extends SonarClient with Http4sClientDsl[IO] {
   private implicit val contextShift: ContextShift[IO] = IO.contextShift(context)
 
   private val log = Logger(this.getClass)
@@ -56,7 +53,7 @@ class SonarClientImpl(implicit val config: SonarBulkAnalyzerConfig,
     }
   }
 
-  private def client(): Resource[IO, Client[IO]] = BlazeClientBuilder[IO](global).resource
+  private def client(): Resource[IO, Client[IO]] = BlazeClientBuilder[IO](context).resource
 
   override def defaultProfile: IO[Unit] = {
     val parsed = Uri.fromString(config.sonarUrl)

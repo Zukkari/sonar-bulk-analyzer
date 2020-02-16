@@ -2,11 +2,11 @@ package io.github.zukkari
 
 import java.io.File
 import java.nio.file.Files
-import java.util.concurrent.{ExecutorService, Executors}
 
 import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
+import io.github.zukkari.execution._
 import io.github.zukkari.git.{GitProjectCloner, GitRepositoryImpl}
 import io.github.zukkari.gradle.GradleBuildFileEnhancer
 import io.github.zukkari.parser.{FDroidProjectFileParserImpl, PostCloneProject, ProjectFileParser}
@@ -14,15 +14,12 @@ import io.github.zukkari.project.{NoOp, ProjectAnalyzer, ProjectBuilder, Project
 import io.github.zukkari.sonar.SonarClientImpl
 import scopt.OParser
 
-import scala.concurrent.ExecutionContext.global
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
-
 case class SonarBulkAnalyzerConfig
 (
   repositoryFile: File = new File("."),
   out: File = new File("."),
   error: File = new File("."),
-  parser: ProjectFileParser = new FDroidProjectFileParserImpl,
+  parser: ProjectFileParser = new FDroidProjectFileParserImpl(context),
   sonarPluginVersion: String = "2.8",
   command: String = "",
   sonarUrl: String = "",
@@ -54,7 +51,7 @@ object SonarBulkAnalyzer extends IOApp {
       opt[String]('p', "parser")
         .valueName("<parserClass>")
         .action((x, c) => x match {
-          case "FDroid" => c.copy(parser = new FDroidProjectFileParserImpl)
+          case "FDroid" => c.copy(parser = new FDroidProjectFileParserImpl(context))
           case _ => c
         })
         .text("Parser to use when parsing repository file"),
@@ -102,13 +99,12 @@ object SonarBulkAnalyzer extends IOApp {
   }
 
   def runWith(implicit config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
-    val cloner = new GitProjectCloner
-    val (classifier, executor, builder) = dependencies
+    val (classifier, builder) = dependencies
 
-    implicit val context: ExecutionContextExecutor = global
-    val client = new SonarClientImpl()
+    val cloner = new GitProjectCloner(config)
+    val client = new SonarClientImpl(config)
 
-    val analyzer = new ProjectAnalyzer
+    val analyzer = new ProjectAnalyzer(config)
     for {
       // Load projects
       projects <- config.parser.parse(config.repositoryFile)
@@ -137,7 +133,7 @@ object SonarBulkAnalyzer extends IOApp {
   }
 
   def runBuild(implicit config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
-    val (classifier, executor, builder) = dependencies
+    val (classifier, builder) = dependencies
 
     val repositories = IO {
       config.out.listFiles((f, _) => f.isDirectory)
@@ -159,11 +155,8 @@ object SonarBulkAnalyzer extends IOApp {
   private def dependencies(implicit config: SonarBulkAnalyzerConfig) = {
     val classifier = new ProjectClassifier(config)
 
-    val executor: ExecutorService = Executors.newFixedThreadPool(2)
-    implicit val context: ExecutionContextExecutor = ExecutionContext.fromExecutor(executor)
-    implicit val enhancer: GradleBuildFileEnhancer = new GradleBuildFileEnhancer
-    val builder = new ProjectBuilder
-    (classifier, executor, builder)
+    val enhancer: GradleBuildFileEnhancer = new GradleBuildFileEnhancer
+    (classifier, new ProjectBuilder(config, context, enhancer))
   }
 
   def mkDir(config: SonarBulkAnalyzerConfig): IO[Unit] = {

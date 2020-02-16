@@ -6,10 +6,10 @@ import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.github.zukkari.SonarBulkAnalyzerConfig
+import io.github.zukkari.execution._
 import io.github.zukkari.git.GitRepository
 
 import scala.annotation.tailrec
-import scala.concurrent.ExecutionContext.global
 
 sealed trait ProjectKind {
   def buildFile: File
@@ -27,7 +27,7 @@ case class UnknownProject(msg: String) extends Exception
 
 class ProjectClassifier(val config: SonarBulkAnalyzerConfig) {
   private val log = Logger(this.getClass)
-  private implicit val contextShift: ContextShift[IO] = IO.contextShift(global)
+  private implicit val contextShift: ContextShift[IO] = IO.contextShift(context)
 
   def classify(repos: List[GitRepository]): IO[List[ProjectBuilderKind]] = repos.map(classify).parSequence
 
