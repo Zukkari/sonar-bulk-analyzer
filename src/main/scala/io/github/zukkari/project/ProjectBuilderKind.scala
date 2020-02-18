@@ -2,6 +2,7 @@ package io.github.zukkari.project
 
 import java.io.{File, FileOutputStream, OutputStream}
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.TimeUnit
 
 import cats.effect.{IO, Resource}
 import cats.implicits._
@@ -38,12 +39,20 @@ abstract class ProjectBuilderKind {
   def buildArgs: List[String]
 
   private def permissionAction: IO[Unit] = IO {
-    new ProcessBuilder()
+    val process = new ProcessBuilder()
       .directory(project)
       .command("chmod", "+x", wrapperName)
       .inheritIO()
       .start()
-      .waitFor()
+
+    val exited = process.waitFor(5L, TimeUnit.MINUTES)
+    if (exited) process.exitValue() else {
+      log.warn(s"Process for project $project timed out, destroying")
+      val destructionProcess = process.destroyForcibly()
+      destructionProcess.waitFor()
+      log.info(s"Process for project $project destroyed successfully")
+      1
+    }
   }.flatMap {
     case 0 => IO(log.info(s"Successfully gave execute permission for wrapper in project: $project"))
     case errCode => IO.raiseError(BuildFailedException(s"Failed to give permission to the project: '$project' due to exit code: '$errCode'"))
@@ -135,13 +144,21 @@ abstract class ProjectBuilderKind {
   }
 
   private def processBuilder(f: File, command: List[String]) = {
-    new ProcessBuilder()
+    val process = new ProcessBuilder()
       .directory(project)
       .command(command: _*)
       .redirectOutput(f)
       .redirectError(f)
       .start()
-      .waitFor()
+
+    val exited = process.waitFor(5L, TimeUnit.MINUTES)
+    if (exited) process.exitValue() else {
+      log.warn(s"Process for project $project timed out, destroying")
+      val destructionProcess = process.destroyForcibly()
+      destructionProcess.waitFor()
+      log.info(s"Process for project $project destroyed successfully")
+      1
+    }
   }
 }
 
