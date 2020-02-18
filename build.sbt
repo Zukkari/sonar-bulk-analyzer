@@ -29,6 +29,9 @@ libraryDependencies ++= Seq(
   "org.scalatestplus" %% "scalatestplus-mockito" % "1.0.0-M2" % Test,
 )
 
+libraryDependencies += "io.circe" %% "circe-core" % "0.13.0"
+libraryDependencies += "io.circe" %% "circe-parser" % "0.13.0"
+
 def isSignatureFile(f: String): Boolean = {
   f.endsWith("DSA") ||
   f.endsWith("SF") ||

@@ -12,6 +12,7 @@ import io.github.zukkari.gradle.GradleBuildFileEnhancer
 import io.github.zukkari.parser.{FDroidProjectFileParserImpl, PostCloneProject, ProjectFileParser}
 import io.github.zukkari.project.{NoOp, ProjectAnalyzer, ProjectBuilder, ProjectClassifier}
 import io.github.zukkari.sonar.SonarClientImpl
+import io.github.zukkari.sonar.`export`.{SonarExportClient, SonarIssueExporter}
 import scopt.OParser
 
 case class SonarBulkAnalyzerConfig
@@ -24,7 +25,10 @@ case class SonarBulkAnalyzerConfig
   command: String = "",
   sonarUrl: String = "",
   sonarToken: String = "",
-  defaultProfile: String = ""
+  defaultProfile: String = "",
+  export: File = new File("exported_results"),
+  paging: Int = 500,
+  rulePrefix: String = ""
 )
 
 object SonarBulkAnalyzer extends IOApp {
@@ -39,12 +43,10 @@ object SonarBulkAnalyzer extends IOApp {
       programName("sba"),
       head("Sonar Bulk Analyzer", "0.1-beta"),
       opt[File]('o', "out")
-        .required()
         .valueName("<dir>")
         .action((x, c) => c.copy(out = x))
         .text("Directory where projects will be cloned to"),
       opt[File]('r', "repoFile")
-        .required()
         .valueName("<file>")
         .action((x, c) => c.copy(repositoryFile = x))
         .text("File where to take repositories to clone from"),
@@ -56,7 +58,6 @@ object SonarBulkAnalyzer extends IOApp {
         })
         .text("Parser to use when parsing repository file"),
       opt[File]('e', "error")
-        .required()
         .valueName("<dir>")
         .action((x, c) => c.copy(error = x))
         .text("Directory to store errors and output from build proccess"),
@@ -75,16 +76,40 @@ object SonarBulkAnalyzer extends IOApp {
         .action((x, c) => c.copy(sonarUrl = x))
         .text("SonarQube location"),
       opt[String]("default-profile")
-        .required()
         .valueName("<profile>")
         .action((x, c) => c.copy(defaultProfile = x))
         .text("Default profile to set for Sonar projects"),
+      opt[File]('x', "export")
+        .valueName("<export_file>")
+        .action((x, c) => c.copy(export = x))
+        .text("Where to export results from SonarQube"),
+      opt[Int]("paging")
+        .valueName("<paging size>")
+        .action((x, c) => c.copy(paging = x))
+        .text("How many issues to fetch at once"),
       cmd("build")
         .action((_, c) => c.copy(command = "build"))
         .text("Build the projects in provided directory"),
+      opt[String]("prefix")
+        .valueName("<prefix>")
+        .action((x, c) => c.copy(rulePrefix = x))
+        .text("Prefixes that rules must start with"),
+      cmd("export")
+        .action((_, c) => c.copy(command = "export"))
+        .text("Export results from SonarQube instance"),
       help("help")
         .text("Display help"),
     )
+  }
+
+  def runExport(config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
+    val client = new SonarExportClient(config)
+    val exporter = new SonarIssueExporter(config)
+    for {
+      issues <- client.readIssues
+      _ <- exporter.`export`(issues) *> IO(log.info(s"Finished export of ${issues.size} issues"))
+      _ <- IO(executor.shutdown()) *> IO(log.info("Executor shutdown finished"))
+    } yield ExitCode.Success
   }
 
   override def run(args: List[String]): IO[ExitCode] = {
@@ -92,6 +117,7 @@ object SonarBulkAnalyzer extends IOApp {
       case Some(config) =>
         config.command match {
           case "build" => runBuild(config)
+          case "export" => runExport(config)
           case _ => runWith(config)
         }
       case _ => IO(log.info("Invalid configuration provided")).as(ExitCode.Error)
@@ -120,7 +146,7 @@ object SonarBulkAnalyzer extends IOApp {
       classified <- classifier.classify(cloned)
       // Build the projects
       builtProjects <- builder.build(classified)
-      onlySuccess = builtProjects.filter( _ != NoOp )
+      onlySuccess = builtProjects.filter(_ != NoOp)
       //Change the default profile to required profile
       _ <- client.defaultProfile
       // Create the projects in SonarQube

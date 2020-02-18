@@ -186,6 +186,8 @@ class GradleProjectBuilderKind(val id: String, val project: File, val config: So
   override def executableName: String = "gradle"
 
   override def analysisArgs: List[String] = List(
+    "-x",
+    "test",
     "sonarqube",
     s"-Dsonar.projectKey=$id",
     s"-Dsonar.host.url=${config.sonarUrl}",
