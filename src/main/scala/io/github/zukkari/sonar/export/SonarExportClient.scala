@@ -40,7 +40,7 @@ class SonarExportClient(val config: SonarBulkAnalyzerConfig) extends Http4sClien
                 case Right(json) => IO(issueCountReader.run(json))
               }
               .flatMap { issueCount: Int =>
-                val runs = (issueCount / config.paging.toDouble).ceil.toInt
+                val runs = (issueCount / config.paging.toDouble).toInt
                 (1 to runs).map {
                   page =>
                     val issueUri = (uri / "api" / "issues" / "search")
