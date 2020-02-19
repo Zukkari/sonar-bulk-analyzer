@@ -107,7 +107,7 @@ object SonarBulkAnalyzer extends IOApp {
     val exporter = new SonarIssueExporter(config)
     for {
       issues <- client.readIssues
-      _ <- exporter.`export`(issues) *> IO(log.info(s"Finished export of ${issues.size} issues"))
+      _ <- exporter.`export`(issues) *> IO(log.info(s"Finished export of ${issues.values.map(_.size).sum} issues"))
       _ <- IO(executor.shutdown()) *> IO(log.info("Executor shutdown finished"))
     } yield ExitCode.Success
   }

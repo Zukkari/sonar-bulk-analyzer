@@ -11,10 +11,12 @@ import io.github.zukkari.SonarBulkAnalyzerConfig
 class SonarIssueExporter(val config: SonarBulkAnalyzerConfig) {
   private val log = Logger(classOf[SonarIssueExporter])
 
-  def export(sonarIssues: List[SonarIssue]): IO[Unit] = {
-    val allIssues = sonarIssues.map(_.rule).distinct
+  def export(sonarIssues: Map[String, List[SonarIssue]]): IO[Unit] = {
+    val allIssues = sonarIssues.values
+      .foldLeft(List.empty[SonarIssue])(_ ++ _)
+      .map(_.rule)
+      .distinct
       .filter(_.startsWith(config.rulePrefix))
-    val issuesByProject = sonarIssues.groupBy(_.project)
 
     IO(log.info(s"Exporting to file ${config.`export`}")).flatMap { _ =>
       val f = config.`export`
@@ -29,9 +31,10 @@ class SonarIssueExporter(val config: SonarBulkAnalyzerConfig) {
       makeExportResource(path).use { writer =>
         IO {
           writer.println("project;" ++ allIssues.mkString(";"))
-          issuesByProject.foreachEntry {
+          sonarIssues.foreachEntry {
             case (project, issues) =>
               val grouped = issues.groupBy(_.rule)
+              log.info(s"Project $project has ${issues.size} issues")
               val issueString = allIssues.map(issue => grouped.get(issue).map(_.size).getOrElse(0)).mkString(";")
               writer.println(project ++ ";" ++ issueString)
           }
