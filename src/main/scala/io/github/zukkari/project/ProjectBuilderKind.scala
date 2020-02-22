@@ -2,17 +2,23 @@ package io.github.zukkari.project
 
 import java.io.{File, FileOutputStream, OutputStream}
 import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Path, Paths}
+import java.util.Comparator
 import java.util.concurrent.TimeUnit
+import java.util.stream.Collectors
 
 import cats.effect.{IO, Resource}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.github.zukkari.SonarBulkAnalyzerConfig
 
+import scala.jdk.CollectionConverters._
+import java.util.function.Function
+
 
 case class BuildFailedException(msg: String) extends Exception
 
-abstract class ProjectBuilderKind {
+abstract class ProjectBuilderKind(val config: SonarBulkAnalyzerConfig) {
   private val log = Logger(this.getClass)
 
   def id: String
@@ -136,6 +142,16 @@ abstract class ProjectBuilderKind {
         }
         case exitCode => IO {
           log.error(s"Analysis for $id finished with ERROR: $exitCode.")
+        } *> IO {
+          log.info(s"Freeing up space for project :$id since it exited with ERROR")
+
+          val toDelete = Paths.get(config.out.getAbsolutePath).resolve(id)
+          Files.walk(toDelete)
+            .sorted(Comparator.reverseOrder())
+            .collect(Collectors.toList())
+            .asScala
+            .map(_.toFile)
+            .foreach(_.delete)
         }
       } *>
       IO {
@@ -162,7 +178,7 @@ abstract class ProjectBuilderKind {
   }
 }
 
-class MavenProjectBuilderKind(val id: String, val project: File, val config: SonarBulkAnalyzerConfig) extends ProjectBuilderKind {
+class MavenProjectBuilderKind(val id: String, val project: File, config: SonarBulkAnalyzerConfig) extends ProjectBuilderKind(config) {
 
   override def wrapperName: String = "./mvnw"
 
@@ -177,7 +193,7 @@ class MavenProjectBuilderKind(val id: String, val project: File, val config: Son
   )
 }
 
-class GradleProjectBuilderKind(val id: String, val project: File, val config: SonarBulkAnalyzerConfig) extends ProjectBuilderKind {
+class GradleProjectBuilderKind(val id: String, val project: File, config: SonarBulkAnalyzerConfig) extends ProjectBuilderKind(config) {
 
   override def wrapperName: String = "./gradlew"
 
@@ -195,7 +211,7 @@ class GradleProjectBuilderKind(val id: String, val project: File, val config: So
   )
 }
 
-case object NoOp extends ProjectBuilderKind {
+case object NoOp extends ProjectBuilderKind(null) {
   override def project: File = ???
 
   override def wrapperName: String = ???

@@ -161,6 +161,10 @@ object SonarBulkAnalyzer extends IOApp {
   def runBuild(implicit config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
     val (classifier, builder) = dependencies
 
+    val client = new SonarClientImpl(config)
+
+    val analyzer = new ProjectAnalyzer(config)
+
     val repositories = IO {
       config.out.listFiles((f, _) => f.isDirectory)
         .toList
@@ -169,11 +173,18 @@ object SonarBulkAnalyzer extends IOApp {
 
     for {
       repos <- repositories
+      // Classify projects
       classified <- classifier.classify(repos)
-      _ <- builder.build(classified)
-      _ <- IO {
-        log.info("Finished building projects")
-      }
+      // Build the projects
+      builtProjects <- builder.build(classified)
+      onlySuccess = builtProjects.filter(_ != NoOp)
+      //Change the default profile to required profile
+      _ <- client.defaultProfile
+      // Create the projects in SonarQube
+      _ <- client.createProjects(onlySuccess)
+      // Run analysis
+      _ <- analyzer.analyze(onlySuccess)
+      _ <- IO(log.info("Analysis finished..."))
       _ <- IO(executor.shutdown()) *> IO(log.info("Shut down executor service"))
     } yield ExitCode.Success
   }

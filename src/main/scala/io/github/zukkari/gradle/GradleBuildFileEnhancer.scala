@@ -99,15 +99,21 @@ class GradleBuildFileEnhancer(implicit val config: SonarBulkAnalyzerConfig) {
   }
 
   private def scriptWithPluginNode(lines: List[String]): List[String] = {
-    val hasBuildScript = lines.find(l => l.contains("buildscript {") || l.contains("buildscript{"))
-    hasBuildScript match {
-      case None => linesToInsert ++ lines
-      case Some(v) =>
-        val idx = lines.indexOf(v)
-        val remainder = lines.drop(idx + 1)
-        val closing = indexOfClosingParen(remainder, idx)
+    val alreadyAdded = lines.exists(_.contains("id 'org.sonarqube' version"))
+    if (alreadyAdded) {
+      log.info("Build script already contains sonar plugin, skipping addition")
+      lines
+    } else {
+      val hasBuildScript = lines.find(l => l.contains("buildscript {") || l.contains("buildscript{"))
+      hasBuildScript match {
+        case None => linesToInsert ++ lines
+        case Some(v) =>
+          val idx = lines.indexOf(v)
+          val remainder = lines.drop(idx + 1)
+          val closing = indexOfClosingParen(remainder, idx)
 
-        lines.slice(0, closing + 2) ++ linesToInsert ++ lines.slice(closing + 2, lines.size)
+          lines.slice(0, closing + 2) ++ linesToInsert ++ lines.slice(closing + 2, lines.size)
+      }
     }
   }
 }
