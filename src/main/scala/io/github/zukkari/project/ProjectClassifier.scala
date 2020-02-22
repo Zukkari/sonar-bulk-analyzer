@@ -32,14 +32,18 @@ class ProjectClassifier(val config: SonarBulkAnalyzerConfig) {
   def classify(repos: List[GitRepository]): IO[List[ProjectBuilderKind]] = repos.map(classify).parSequence
 
   def classify(repo: GitRepository): IO[ProjectBuilderKind] = {
-    classifyProject(repo.dir).flatMap {
-      case GradleProject(f) =>
-        IO(log.info(s"Project '$repo' classified as Gradle project")) *>
-        IO.pure(new GradleProjectBuilderKind(repo.id, f, config))
-      case MavenProject(f) =>
-        IO(log.info(s"Project '$repo' classified as Maven project")) *>
-        IO.pure(new MavenProjectBuilderKind(repo.id, f, config))
-      case _ => IO(log.error(s"Project '$repo' does not use proper build system so we cannot analyze it")) *> IO.pure(NoOp)
+    if (!repo.dir.exists()) {
+      IO.pure(NoOp)
+    } else {
+      classifyProject(repo.dir).flatMap {
+        case GradleProject(f) =>
+          IO(log.info(s"Project '$repo' classified as Gradle project")) *>
+            IO.pure(new GradleProjectBuilderKind(repo.id, f, config))
+        case MavenProject(f) =>
+          IO(log.info(s"Project '$repo' classified as Maven project")) *>
+            IO.pure(new MavenProjectBuilderKind(repo.id, f, config))
+        case _ => IO(log.error(s"Project '$repo' does not use proper build system so we cannot analyze it")) *> IO.pure(NoOp)
+      }
     }
   }
 
@@ -52,7 +56,8 @@ class ProjectClassifier(val config: SonarBulkAnalyzerConfig) {
           val kind = projectKind(x, children)
           kind match {
             case Some(k) => k
-            case _ => _classify(xs ++ children)
+            case _ if children != null => _classify(xs ++ children)
+            case _ => _classify(xs)
           }
         case _ => Unknown
       }
@@ -63,14 +68,16 @@ class ProjectClassifier(val config: SonarBulkAnalyzerConfig) {
     }
   }
 
-  def fileFilter: FileFilter = f => f.isDirectory || maven(f) || gradle(f)
+  def fileFilter: FileFilter = f => f.isDirectory || maven(f) || gradle(f) || isSimpleGradle(f)
 
   def gradle: File => Boolean = _.getName == "gradlew"
+
+  def isSimpleGradle: File => Boolean = _.getName == "build.gradle"
 
   def maven: File => Boolean = _.getName == "pom.xml"
 
   def projectKind(parent: File, array: Array[File]): Option[ProjectKind] = {
-    (array.exists(maven), array.exists(gradle)) match {
+    (array != null && array.exists(maven), array != null && array.exists(gradle) && array.exists(isSimpleGradle)) match {
       case (true, _) => MavenProject(parent).some
       case (_, true) => GradleProject(parent).some
       case _ => none
