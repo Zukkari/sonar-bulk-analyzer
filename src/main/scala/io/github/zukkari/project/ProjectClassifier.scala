@@ -67,10 +67,12 @@ class ProjectClassifier(val config: SonarBulkAnalyzerConfig) {
 
   def gradle: File => Boolean = _.getName == "gradlew"
 
+  def isSimpleGradle: File => Boolean = _.getName == "build.gradle"
+
   def maven: File => Boolean = _.getName == "pom.xml"
 
   def projectKind(parent: File, array: Array[File]): Option[ProjectKind] = {
-    (array.exists(maven), array.exists(gradle)) match {
+    (array.exists(maven), array.exists(gradle) && array.exists(isSimpleGradle)) match {
       case (true, _) => MavenProject(parent).some
       case (_, true) => GradleProject(parent).some
       case _ => none
