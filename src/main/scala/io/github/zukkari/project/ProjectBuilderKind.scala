@@ -92,6 +92,16 @@ abstract class ProjectBuilderKind(val config: SonarBulkAnalyzerConfig) {
           this
         }
         case exitCode => IO {
+          log.info(s"Freeing up space for project :$id since it exited with ERROR")
+
+          val toDelete = Paths.get(config.out.getAbsolutePath).resolve(id)
+          Files.walk(toDelete)
+            .sorted(Comparator.reverseOrder())
+            .collect(Collectors.toList())
+            .asScala
+            .map(_.toFile)
+            .foreach(_.delete)
+        } *> IO {
           log.error(s"Build for $id finished with ERROR: $exitCode. Details: ${outputStream.getAbsolutePath}")
           NoOp
         }
@@ -142,16 +152,6 @@ abstract class ProjectBuilderKind(val config: SonarBulkAnalyzerConfig) {
         }
         case exitCode => IO {
           log.error(s"Analysis for $id finished with ERROR: $exitCode.")
-        } *> IO {
-          log.info(s"Freeing up space for project :$id since it exited with ERROR")
-
-          val toDelete = Paths.get(config.out.getAbsolutePath).resolve(id)
-          Files.walk(toDelete)
-            .sorted(Comparator.reverseOrder())
-            .collect(Collectors.toList())
-            .asScala
-            .map(_.toFile)
-            .foreach(_.delete)
         }
       } *>
       IO {
