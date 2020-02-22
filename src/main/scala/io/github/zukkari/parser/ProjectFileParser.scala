@@ -43,7 +43,7 @@ class FDroidProjectFileParserImpl(val context: ExecutionContext) extends Project
 
   private val log = Logger(this.getClass)
 
-  private val projectRegex = "\\|\\s+\\d+\\.\\s+(.+?)\\|\\s+(.+?)\\|\\s*(.+?)\\|".r("name", "description", "url")
+  private val projectRegex = "\\|\\s\\d+\\.+\\s*(.*?)\\|(.+?)\\|\\s+(.+?)\\s+\\|".r("name", "description", "url")
 
   override def parse(f: File): IO[List[Project]] = {
     mkResource(f)
