@@ -23,15 +23,7 @@ class SonarIssueExporter(val config: SonarBulkAnalyzerConfig) {
     val allIssues = issuesWithPrefix
       .filterNot(_.contains("StatisticsRule"))
 
-    val statistics =  issuesWithPrefix.find(_.contains("StatisticsRule"))
-        .getOrElse("")
-        .split("/").map(_.split(":").toList).map {
-          case statName :: statValue :: _ => Statistic(statName, statValue.toInt).some
-          case _ => None
-        }
-        .filter(_.nonEmpty)
-        .map(_.get)
-        .toList
+    val maybeStatisticsIssueName =  issuesWithPrefix.find(_.contains("StatisticsRule"))
 
     IO(log.info(s"Exporting to file ${config.`export`}")).flatMap { _ =>
       val f = config.`export`
@@ -45,9 +37,20 @@ class SonarIssueExporter(val config: SonarBulkAnalyzerConfig) {
     }.flatMap { path =>
       makeExportResource(path).use { writer =>
         IO {
-          writer.println("project;" ++ allIssues.mkString(";") ++ ";" ++ statistics.map(_.name).mkString(";"))
+          writer.println("project;" ++ allIssues.mkString(";") ++ ";Classes;Methods;Variables;Interfaces")
           sonarIssues.foreachEntry {
             case (project, issues) =>
+              val statistics = maybeStatisticsIssueName.flatMap { name =>
+                issues.find(_.rule == name)
+              }.map(_.message.split("/").map(_.split(":").toList).map {
+                case statName :: statValue :: _ => Statistic(statName, statValue.toInt).some
+                case _ => None
+              }
+                .filter(_.nonEmpty)
+                .map(_.get)
+                .toList)
+                .getOrElse(List.empty)
+
               val grouped = issues.groupBy(_.rule)
               log.info(s"Project $project has ${issues.size} issues")
 

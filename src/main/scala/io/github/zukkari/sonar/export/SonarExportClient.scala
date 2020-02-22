@@ -186,8 +186,9 @@ class SonarExportClient(val config: SonarBulkAnalyzerConfig) extends Http4sClien
       json =>
         val rule: String = json.hcursor.downField("rule").focus.flatMap(_.asString).getOrElse("Empty rule name")
         val project: String = json.hcursor.downField("project").focus.flatMap(_.asString).getOrElse("Empty project name")
+        val message: String = json.hcursor.downField("message").focus.flatMap(_.asString).getOrElse("Empty message")
 
-        SonarIssue(rule, project)
+        SonarIssue(rule, project, message)
     }
   }
 
