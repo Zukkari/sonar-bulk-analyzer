@@ -97,6 +97,9 @@ object SonarBulkAnalyzer extends IOApp {
       cmd("export")
         .action((_, c) => c.copy(command = "export"))
         .text("Export results from SonarQube instance"),
+      cmd("analyze")
+        .action((_, c) => c.copy(command = "analyze"))
+        .text("Analyze the projects"),
       help("help")
         .text("Display help"),
     )
@@ -112,12 +115,42 @@ object SonarBulkAnalyzer extends IOApp {
     } yield ExitCode.Success
   }
 
+  def runAnalysis(implicit config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
+    val (classifier, builder) = dependencies
+
+    val client = new SonarClientImpl(config)
+
+    val analyzer = new ProjectAnalyzer(config)
+
+    val repositories = IO {
+      config.out.listFiles((f, _) => f.isDirectory)
+        .toList
+        .map(dir => GitRepositoryImpl(dir.getName, PostCloneProject, dir))
+    }
+
+    for {
+      repos <- repositories
+      // Classify projects
+      classified <- classifier.classify(repos)
+      // Build the projects
+      //Change the default profile to required profile
+      _ <- client.defaultProfile
+      // Create the projects in SonarQube
+      _ <- client.createProjects(classified)
+      // Run analysis
+      _ <- analyzer.analyze(classified)
+      _ <- IO(log.info("Analysis finished..."))
+      _ <- IO(executor.shutdown()) *> IO(log.info("Shut down executor service"))
+    } yield ExitCode.Success
+  }
+
   override def run(args: List[String]): IO[ExitCode] = {
     OParser.parse(parser, args, SonarBulkAnalyzerConfig()) match {
       case Some(config) =>
         config.command match {
           case "build" => runBuild(config)
           case "export" => runExport(config)
+          case "analyze" => runAnalysis(config)
           case _ => runWith(config)
         }
       case _ => IO(log.info("Invalid configuration provided")).as(ExitCode.Error)
