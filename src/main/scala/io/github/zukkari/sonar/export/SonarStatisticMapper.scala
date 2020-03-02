@@ -1,6 +1,7 @@
 package io.github.zukkari.sonar.`export`
 
 import cats.data.Reader
+import com.typesafe.scalalogging.Logger
 import io.circe.{Json, JsonNumber}
 import io.circe.parser._
 
@@ -85,8 +86,10 @@ class SonarStatisticMapper {
   private def transform(issue: SonarIssue): List[String] = {
     if (issue.rule.contains("ClassStatsCollector")) {
       parseClassRule(issue.message)
-    } else {
+    } else if (issue.rule.contains("InterfaceStatsCollector")) {
       parseInterfaceRule(issue.message)
+    } else {
+      Nil
     }
   }
 
@@ -129,8 +132,7 @@ class SonarStatisticMapper {
         complexity,
         complexityRatio,
         coupling,
-        cohesion,
-        methodList
+        cohesion
       )
     }
 
