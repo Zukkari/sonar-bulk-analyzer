@@ -28,7 +28,8 @@ case class SonarBulkAnalyzerConfig
   defaultProfile: String = "",
   export: File = new File("exported_results"),
   paging: Int = 500,
-  rulePrefix: String = ""
+  rulePrefix: String = "",
+  statRun: Boolean = false
 )
 
 object SonarBulkAnalyzer extends IOApp {
@@ -94,6 +95,10 @@ object SonarBulkAnalyzer extends IOApp {
         .valueName("<prefix>")
         .action((x, c) => c.copy(rulePrefix = x))
         .text("Prefixes that rules must start with"),
+      opt[Boolean]("stats")
+        .valueName("<true/false>")
+        .action((x, c) => c.copy(statRun = x))
+        .text("Statistics run or not"),
       cmd("export")
         .action((_, c) => c.copy(command = "export"))
         .text("Export results from SonarQube instance"),
