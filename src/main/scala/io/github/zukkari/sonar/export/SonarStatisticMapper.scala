@@ -13,8 +13,7 @@ case class ClassStatistics(attributes: Int,
                            complexity: Int,
                            complexityRatio: Double,
                            coupling: Int,
-                           cohesion: Int,
-                           methodList: List[MethodStatistics])
+                           cohesion: Int)
 
 case class MethodStatistics(complexity: Int,
                             calls: Int,
@@ -30,33 +29,44 @@ class SonarStatisticMapper {
       .reduce(_ ++ _)
   }
 
+  def issueTypeReader: Reader[Json, String] =
+    Reader { json =>
+      json.hcursor
+        .downField("issueType")
+        .focus
+        .flatMap(_.asString)
+        .getOrElse("")
+    }
+
   private def parseClassRule(message: String): List[String] = {
     parse(message) match {
       case Left(parsingFailure) => throw parsingFailure
       case Right(json) =>
-        val stats = classStatisticReader.run(json)
-        List(
-          s"class;attributes;${stats.attributes}",
-          s"class;methods;${stats.methods}",
-          s"class;instructions;${stats.instructions}",
-          s"class;comments;${stats.comments}",
-          s"class;complexity;${stats.complexity}",
-          s"class;complexityRatio;${stats.complexityRatio}",
-          s"class;coupling;${stats.coupling}",
-          s"class;cohesion;${stats.cohesion}",
-        ) ++
-          stats.methodList
-            .map { method =>
-              List(
-                s"method;complexity;${method.complexity}",
-                s"method;calls;${method.calls}",
-                s"method;instructions;${method.instructions}",
-                s"method;parameters;${method.parameters}",
-                s"method;chainLength;${method.chainLength}",
-                s"method;switchStatements;${method.switchStatements}",
-              )
-            }
-            .reduce(_ ++ _)
+        val issueType = issueTypeReader.run(json)
+
+        if (issueType == "class") {
+          val stats = classStatisticReader.run(json)
+          List(
+            s"class;attributes;${stats.attributes}",
+            s"class;methods;${stats.methods}",
+            s"class;instructions;${stats.instructions}",
+            s"class;comments;${stats.comments}",
+            s"class;complexity;${stats.complexity}",
+            s"class;complexityRatio;${stats.complexityRatio}",
+            s"class;coupling;${stats.coupling}",
+            s"class;cohesion;${stats.cohesion}",
+          )
+        } else {
+          val method = methodStatisticsReader.run(json)
+          List(
+            s"method;complexity;${method.complexity}",
+            s"method;calls;${method.calls}",
+            s"method;instructions;${method.instructions}",
+            s"method;parameters;${method.parameters}",
+            s"method;chainLength;${method.chainLength}",
+            s"method;switchStatements;${method.switchStatements}",
+          )
+        }
     }
   }
 
