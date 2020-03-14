@@ -169,7 +169,8 @@ object SonarBulkAnalyzer extends IOApp {
 
   def runLinesOfCode(config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
     for {
-      res <- new LinesOfCodeExporter(config).lines()
+      _ <- new LinesOfCodeExporter(config).lines()
+      _ <- IO(executor.shutdown()) *> IO(log.info("Shut down executor service"))
     } yield ExitCode.Success
   }
 

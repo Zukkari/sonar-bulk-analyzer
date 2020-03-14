@@ -46,7 +46,9 @@ class LinesOfCodeExporter(val config: SonarBulkAnalyzerConfig)
 
         descriptors.foreach {
           case None =>
+            log.info("Empty row, skipping...")
           case Some(descriptor) =>
+            log.info(s"Writing row: $descriptor")
             writer.write(descriptor.project ++ ";" ++ descriptor.loc.toString)
         }
       }
