@@ -63,6 +63,7 @@ class LinesOfCodeExporter(val config: SonarBulkAnalyzerConfig)
 
   private def makeProjectReader: Reader[Json, Option[LinesDescriptor]] =
     Reader { json =>
+      log.info(json.toString())
       for {
         key <- json.hcursor
           .downField("component")
