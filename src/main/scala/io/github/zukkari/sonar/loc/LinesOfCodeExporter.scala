@@ -42,14 +42,14 @@ class LinesOfCodeExporter(val config: SonarBulkAnalyzerConfig)
     writer(path).use { writer =>
       log.info(s"Writing ${descriptors.size} to @ $path")
       IO {
-        writer.write("project;lines")
+        writer.write("project;lines\n")
 
         descriptors.foreach {
           case None =>
             log.info("Empty row, skipping...")
           case Some(descriptor) =>
             log.info(s"Writing row: $descriptor")
-            writer.write(descriptor.project ++ ";" ++ descriptor.loc.toString)
+            writer.write(descriptor.project ++ ";" ++ descriptor.loc.toString ++ "\n")
         }
       }
     }
@@ -79,8 +79,8 @@ class LinesOfCodeExporter(val config: SonarBulkAnalyzerConfig)
           .focus
           .flatMap(_.asArray)
           .flatMap(_.headOption)
-          .flatMap(_.hcursor.downField("value").focus.flatMap(_.asNumber))
-          .flatMap(_.toInt)
+          .flatMap(_.hcursor.downField("value").focus.flatMap(_.asString))
+          .map(_.toInt)
         if loc > 0
       } yield LinesDescriptor(key, loc)
     }
