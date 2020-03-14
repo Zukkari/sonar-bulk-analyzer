@@ -9,28 +9,36 @@ import com.typesafe.scalalogging.Logger
 import io.github.zukkari.execution._
 import io.github.zukkari.git.{GitProjectCloner, GitRepositoryImpl}
 import io.github.zukkari.gradle.GradleBuildFileEnhancer
-import io.github.zukkari.parser.{FDroidProjectFileParserImpl, PostCloneProject, ProjectFileParser}
-import io.github.zukkari.project.{NoOp, ProjectAnalyzer, ProjectBuilder, ProjectClassifier}
+import io.github.zukkari.parser.{
+  FDroidProjectFileParserImpl,
+  PostCloneProject,
+  ProjectFileParser
+}
+import io.github.zukkari.project.{
+  NoOp,
+  ProjectAnalyzer,
+  ProjectBuilder,
+  ProjectClassifier
+}
 import io.github.zukkari.sonar.SonarClientImpl
 import io.github.zukkari.sonar.`export`.{SonarExportClient, SonarIssueExporter}
+import io.github.zukkari.sonar.loc.LinesOfCodeExporter
 import scopt.OParser
 
-case class SonarBulkAnalyzerConfig
-(
-  repositoryFile: File = new File("."),
-  out: File = new File("."),
-  error: File = new File("."),
-  parser: ProjectFileParser = new FDroidProjectFileParserImpl(context),
-  sonarPluginVersion: String = "2.8",
-  command: String = "",
-  sonarUrl: String = "",
-  sonarToken: String = "",
-  defaultProfile: String = "",
-  export: File = new File("exported_results"),
-  paging: Int = 500,
-  rulePrefix: String = "",
-  statRun: Boolean = false
-)
+case class SonarBulkAnalyzerConfig(repositoryFile: File = new File("."),
+                                   out: File = new File("."),
+                                   error: File = new File("."),
+                                   parser: ProjectFileParser =
+                                     new FDroidProjectFileParserImpl(context),
+                                   sonarPluginVersion: String = "2.8",
+                                   command: String = "",
+                                   sonarUrl: String = "",
+                                   sonarToken: String = "",
+                                   defaultProfile: String = "",
+                                   export: File = new File("exported_results"),
+                                   paging: Int = 500,
+                                   rulePrefix: String = "",
+                                   statRun: Boolean = false)
 
 object SonarBulkAnalyzer extends IOApp {
   private val log = Logger(SonarBulkAnalyzer.getClass)
@@ -53,10 +61,14 @@ object SonarBulkAnalyzer extends IOApp {
         .text("File where to take repositories to clone from"),
       opt[String]('p', "parser")
         .valueName("<parserClass>")
-        .action((x, c) => x match {
-          case "FDroid" => c.copy(parser = new FDroidProjectFileParserImpl(context))
-          case _ => c
-        })
+        .action(
+          (x, c) =>
+            x match {
+              case "FDroid" =>
+                c.copy(parser = new FDroidProjectFileParserImpl(context))
+              case _ => c
+          }
+        )
         .text("Parser to use when parsing repository file"),
       opt[File]('e', "error")
         .valueName("<dir>")
@@ -105,6 +117,9 @@ object SonarBulkAnalyzer extends IOApp {
       cmd("analyze")
         .action((_, c) => c.copy(command = "analyze"))
         .text("Analyze the projects"),
+      cmd("lines")
+        .action((_, c) => c.copy(command = "lines"))
+        .text("Export lines of code from analyzed projects"),
       help("help")
         .text("Display help"),
     )
@@ -115,7 +130,9 @@ object SonarBulkAnalyzer extends IOApp {
     val exporter = new SonarIssueExporter(config)
     for {
       issues <- client.readIssues
-      _ <- exporter.`export`(issues) *> IO(log.info(s"Finished export of ${issues.values.map(_.size).sum} issues"))
+      _ <- exporter.`export`(issues) *> IO(
+        log.info(s"Finished export of ${issues.values.map(_.size).sum} issues")
+      )
       _ <- IO(executor.shutdown()) *> IO(log.info("Executor shutdown finished"))
     } yield ExitCode.Success
   }
@@ -128,7 +145,8 @@ object SonarBulkAnalyzer extends IOApp {
     val analyzer = new ProjectAnalyzer(config)
 
     val repositories = IO {
-      config.out.listFiles((f, _) => f.isDirectory)
+      config.out
+        .listFiles((f, _) => f.isDirectory)
         .toList
         .map(dir => GitRepositoryImpl(dir.getName, PostCloneProject, dir))
     }
@@ -149,16 +167,24 @@ object SonarBulkAnalyzer extends IOApp {
     } yield ExitCode.Success
   }
 
+  def runLinesOfCode(config: SonarBulkAnalyzerConfig): IO[ExitCode] = {
+    for {
+      res <- new LinesOfCodeExporter(config).lines()
+    } yield ExitCode.Success
+  }
+
   override def run(args: List[String]): IO[ExitCode] = {
     OParser.parse(parser, args, SonarBulkAnalyzerConfig()) match {
       case Some(config) =>
         config.command match {
-          case "build" => runBuild(config)
-          case "export" => runExport(config)
+          case "build"   => runBuild(config)
+          case "export"  => runExport(config)
           case "analyze" => runAnalysis(config)
-          case _ => runWith(config)
+          case "lines"   => runLinesOfCode(config)
+          case _         => runWith(config)
         }
-      case _ => IO(log.info("Invalid configuration provided")).as(ExitCode.Error)
+      case _ =>
+        IO(log.info("Invalid configuration provided")).as(ExitCode.Error)
     }
   }
 
@@ -178,7 +204,7 @@ object SonarBulkAnalyzer extends IOApp {
       allProjects <- cloner.doClone(projects)
       cloned = allProjects.filter {
         case _: GitRepositoryImpl => true
-        case _ => false
+        case _                    => false
       }
       // Classify projects
       classified <- classifier.classify(cloned)
@@ -204,7 +230,8 @@ object SonarBulkAnalyzer extends IOApp {
     val analyzer = new ProjectAnalyzer(config)
 
     val repositories = IO {
-      config.out.listFiles((f, _) => f.isDirectory)
+      config.out
+        .listFiles((f, _) => f.isDirectory)
         .toList
         .map(dir => GitRepositoryImpl(dir.getName, PostCloneProject, dir))
     }
@@ -235,7 +262,11 @@ object SonarBulkAnalyzer extends IOApp {
   }
 
   def mkDir(config: SonarBulkAnalyzerConfig): IO[Unit] = {
-    IO(log.info(s"Creating directory for repositories in '${config.out.getAbsolutePath}'")) *>
+    IO(
+      log.info(
+        s"Creating directory for repositories in '${config.out.getAbsolutePath}'"
+      )
+    ) *>
       IO {
         Files.createDirectory(config.out.toPath)
       } *>
@@ -247,5 +278,3 @@ object SonarBulkAnalyzer extends IOApp {
       }
   }
 }
-
-
